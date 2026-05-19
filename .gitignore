@@ -1,0 +1,32 @@
+# Environment variables — never commit secrets
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+fastapi_app/venv/
+fastapi_app/.venv/
+*.egg-info/
+dist/
+build/
+*.sqlite3
+*.db
+
+# Node
+vue_frontend/node_modules/
+vue_frontend/dist/
+vue_frontend/.vite/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp

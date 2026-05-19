@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 310 82" fill="none">
+  <defs>
+    <linearGradient id="topArc" gradientUnits="userSpaceOnUse" x1="16" y1="14" x2="112" y2="41">
+      <stop offset="0%" stop-color="#1e3a8a"/>
+      <stop offset="50%" stop-color="#0891b2"/>
+      <stop offset="100%" stop-color="#22d3ee"/>
+    </linearGradient>
+    <linearGradient id="botArc" gradientUnits="userSpaceOnUse" x1="112" y1="41" x2="16" y2="68">
+      <stop offset="0%" stop-color="#22d3ee"/>
+      <stop offset="50%" stop-color="#6d28d9"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Bottom arc — renders behind text -->
+  <g transform="translate(64,41) rotate(-42)">
+    <path d="M 48 0 A 48 27 0 0 1 -48 0"
+      stroke="url(#botArc)" stroke-width="13" stroke-linecap="round"/>
+  </g>
+
+  <!-- orbitpay text -->
+  <text x="102" y="59"
+    font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif"
+    font-size="42" font-weight="700" fill="#172554" letter-spacing="-1">orbitpay</text>
+
+  <!-- Top arc — renders in front of text -->
+  <g transform="translate(64,41) rotate(-42)">
+    <path d="M -48 0 A 48 27 0 0 1 48 0"
+      stroke="url(#topArc)" stroke-width="13" stroke-linecap="round"/>
+  </g>
+</svg>

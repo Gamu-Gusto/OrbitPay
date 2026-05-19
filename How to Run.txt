@@ -1,0 +1,3 @@
+cd "c:\Users\user\OneDrive\Documentos\Payroll System\fastapi_app"
+venv\Scripts\activate
+uvicorn main:app --host 0.0.0.0 --port 8000
