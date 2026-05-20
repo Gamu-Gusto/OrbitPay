@@ -50,6 +50,7 @@
           </select>
         </div>
         <button @click="register" :disabled="loading || form.password.length > 72" class="btn-primary w-full">{{ loading ? 'Creating...' : 'Create account' }}</button>
+        <p class="back-link">Already have an account? <router-link to="/login">Back to login</router-link></p>
       </div>
     </div>
   </div>
@@ -120,6 +121,18 @@
 }
 
 .w-full { width: 100%; }
+
+.back-link {
+  text-align: center;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin: 4px 0 0;
+}
+.back-link a {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+.back-link a:hover { text-decoration: underline; }
 
 @media (max-width: 540px) {
   .form-row { grid-template-columns: 1fr; }
