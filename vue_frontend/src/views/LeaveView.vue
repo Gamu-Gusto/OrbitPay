@@ -113,7 +113,10 @@
                   <td>{{ fmtDate(r.end_date) }}</td>
                   <td class="num">{{ r.days_requested }}</td>
                   <td><span class="badge" :class="statusBadge(r.status)">{{ r.status }}</span></td>
-                  <td class="muted-text">{{ r.note || '—' }}</td>
+                  <td>
+                    <span v-if="r.status === 'rejected' && r.review_note" class="rejection-reason">{{ r.review_note }}</span>
+                    <span v-else class="muted-text">—</span>
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -210,7 +213,7 @@ export default {
 
     const isEmployee = computed(() => auth.roles.includes('employee'))
     const isManager = computed(() =>
-      auth.roles.some(r => ['super_admin', 'accountant', 'client_admin'].includes(r))
+      auth.roles.some(r => ['super_admin', 'accountant'].includes(r))
     )
 
     // ── Employee state ──────────────────────────────────
@@ -520,6 +523,7 @@ export default {
 .text-red { color: #dc2626; font-weight: 600; }
 
 .muted-text { color: var(--color-text-muted); font-size: 12px; }
+.rejection-reason { font-size: 12px; color: #b91c1c; font-style: italic; }
 .name-cell { font-weight: 500; }
 .reason-cell { max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 

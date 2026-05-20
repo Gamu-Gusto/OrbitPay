@@ -1,6 +1,7 @@
 import os
 import io
 import json
+import base64
 import smtplib
 import uvicorn
 from calendar import monthrange
@@ -12,7 +13,7 @@ from email.mime.text import MIMEText
 from typing import List, Optional, Tuple
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Depends, Body, Query
+from fastapi import FastAPI, HTTPException, Depends, Body, Query, UploadFile, File, Form
 from sqlalchemy import text
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,7 +21,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
 from db import Base, engine, get_db, SessionLocal
-from orm_models import Company, Employee, User, Role, UserRole, AccountantAssignment, UserCompany, EmployeeUser, PayrollRecord, LeaveBalance, RefreshToken, AuditEvent, LeaveRequest
+from orm_models import Company, Employee, User, Role, UserRole, AccountantAssignment, UserCompany, EmployeeUser, PayrollRecord, LeaveBalance, RefreshToken, AuditEvent, LeaveRequest, EmployeeDocument, BankingChangeRequest
 from models import PayrollInput, PayslipData, ReversePayrollInput, ReversePayrollResult, EmployeeDetails, CompanyDetails
 from schemas import (
     CompanyCreate,
@@ -48,6 +49,11 @@ from schemas import (
     EmployeeImportResult,
     LeaveRequestCreate,
     LeaveRequestReview,
+    EmployeeDocumentRead,
+    DocumentReviewRequest,
+    BankingChangeCreate,
+    BankingChangeRead,
+    BankingChangeReviewRequest,
 )
 from auth import hash_password, verify_password, create_access_token, decode_token, create_refresh_token, hash_refresh_token, REFRESH_TOKEN_DAYS
 from hr_reports import router as hr_reports_router
@@ -76,6 +82,10 @@ def run_migrations():
             ("employees",       "bank_account_last4",        "TEXT"),
             ("employees",       "pension_fund_name",         "TEXT"),
             ("employees",       "medical_aid_scheme_name",   "TEXT"),
+            # leave_requests approval columns
+            ("leave_requests",  "reviewed_by",               "INTEGER"),
+            ("leave_requests",  "reviewed_at",               "TIMESTAMP"),
+            ("leave_requests",  "review_note",               "TEXT"),
         ]
         for table, col, col_type in cols:
             try:
@@ -490,7 +500,10 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
             raise HTTPException(status_code=401, detail="Invalid credentials")
 
         roles = [db.get(Role, ur.role_id).name for ur in user.roles]
-        token = create_access_token(str(user.id), roles)
+        company_ids = []
+        if "accountant" in roles:
+            company_ids = [a.company_id for a in db.query(AccountantAssignment).filter_by(accountant_user_id=user.id).all()]
+        token = create_access_token(str(user.id), roles, company_ids)
         raw_refresh, refresh_hash = create_refresh_token()
         db.add(RefreshToken(
             token_hash=refresh_hash,
@@ -509,7 +522,8 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
                 first_name=user.first_name,
                 last_name=user.last_name,
                 is_active=user.is_active,
-                roles=roles
+                roles=roles,
+                assigned_company_ids=company_ids
             )
         )
 
@@ -554,7 +568,10 @@ def refresh_access_token(body: RefreshRequest, db: Session = Depends(get_db)):
     # Rotate: revoke old, issue new pair
     rt.revoked = True
     roles = [db.get(Role, ur.role_id).name for ur in user.roles]
-    new_access = create_access_token(str(user.id), roles)
+    company_ids = []
+    if "accountant" in roles:
+        company_ids = [a.company_id for a in db.query(AccountantAssignment).filter_by(accountant_user_id=user.id).all()]
+    new_access = create_access_token(str(user.id), roles, company_ids)
     raw_refresh, refresh_hash = create_refresh_token()
     db.add(RefreshToken(
         token_hash=refresh_hash,
@@ -565,7 +582,7 @@ def refresh_access_token(body: RefreshRequest, db: Session = Depends(get_db)):
     return TokenResponse(
         access_token=new_access,
         refresh_token=raw_refresh,
-        user=UserRead(id=user.id, email=user.email, first_name=user.first_name, last_name=user.last_name, is_active=user.is_active, roles=roles)
+        user=UserRead(id=user.id, email=user.email, first_name=user.first_name, last_name=user.last_name, is_active=user.is_active, roles=roles, assigned_company_ids=company_ids)
     )
 
 # ------------------ Users Management (Super Admin only) ------------------
@@ -659,7 +676,7 @@ def assign_client_admin(body: ClientAdminAssignRequest, db: Session = Depends(ge
 
 
 @app.post("/assignments/employee-link")
-def link_employee(body: EmployeeLinkRequest, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "client_admin"))):
+def link_employee(body: EmployeeLinkRequest, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin"))):
     if not db.get(User, body.user_id) or not db.get(Employee, body.employee_id):
         raise HTTPException(status_code=400, detail="Invalid ids")
     db.add(EmployeeUser(user_id=body.user_id, employee_id=body.employee_id))
@@ -669,7 +686,7 @@ def link_employee(body: EmployeeLinkRequest, db: Session = Depends(get_db), user
 
 # ------------------ Companies CRUD ------------------
 @app.post("/companies", response_model=CompanyRead)
-def create_company(company_in: CompanyCreate, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "accountant", "client_admin"))):
+def create_company(company_in: CompanyCreate, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "accountant"))):
     try:
         company = Company(**company_in.model_dump(exclude_unset=True))
         db.add(company)
@@ -682,7 +699,7 @@ def create_company(company_in: CompanyCreate, db: Session = Depends(get_db), use
 
 
 @app.get("/companies", response_model=list[CompanyRead])
-def list_companies(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "accountant", "client_admin"))):
+def list_companies(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "accountant"))):
     try:
         q = db.query(Company)
         roles = getattr(user, "role_names", [])
@@ -690,6 +707,7 @@ def list_companies(skip: int = 0, limit: int = 100, db: Session = Depends(get_db
             allowed_company_ids = set()
             if "accountant" in roles:
                 allowed_company_ids |= {a.company_id for a in db.query(AccountantAssignment).filter_by(accountant_user_id=user.id)}
+            # TODO: remove client_admin scope after data migration is confirmed
             if "client_admin" in roles:
                 allowed_company_ids |= {uc.company_id for uc in db.query(UserCompany).filter_by(user_id=user.id)}
             if not allowed_company_ids:
@@ -701,7 +719,7 @@ def list_companies(skip: int = 0, limit: int = 100, db: Session = Depends(get_db
 
 
 @app.get("/companies/{company_id}", response_model=CompanyRead)
-def get_company(company_id: int, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "accountant", "client_admin"))):
+def get_company(company_id: int, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "accountant"))):
     company = db.get(Company, company_id)
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
@@ -710,6 +728,7 @@ def get_company(company_id: int, db: Session = Depends(get_db), user: User = Dep
         allowed = False
         if "accountant" in roles and db.query(AccountantAssignment).filter_by(accountant_user_id=user.id, company_id=company_id).first():
             allowed = True
+        # TODO: remove client_admin scope after data migration is confirmed
         if "client_admin" in roles and db.query(UserCompany).filter_by(user_id=user.id, company_id=company_id).first():
             allowed = True
         if not allowed:
@@ -718,7 +737,7 @@ def get_company(company_id: int, db: Session = Depends(get_db), user: User = Dep
 
 
 @app.put("/companies/{company_id}", response_model=CompanyRead)
-def update_company(company_id: int, company_in: CompanyUpdate, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "accountant", "client_admin"))):
+def update_company(company_id: int, company_in: CompanyUpdate, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "accountant"))):
     company = db.get(Company, company_id)
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
@@ -744,7 +763,7 @@ def delete_company(company_id: int, db: Session = Depends(get_db), user: User = 
 
 # ------------------ Employees CRUD ------------------
 @app.post("/companies/{company_id}/employees", response_model=EmployeeRead)
-def create_employee(company_id: int, employee_in: EmployeeCreate, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "accountant", "client_admin"))):
+def create_employee(company_id: int, employee_in: EmployeeCreate, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "accountant"))):
     if not db.get(Company, company_id):
         raise HTTPException(status_code=404, detail="Company not found")
     get_company(company_id, db, user)
@@ -758,7 +777,7 @@ def create_employee(company_id: int, employee_in: EmployeeCreate, db: Session = 
 
 
 @app.get("/companies/{company_id}/employees", response_model=list[EmployeeRead])
-def list_employees(company_id: int, skip: int = 0, limit: int = 100, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "accountant", "client_admin"))):
+def list_employees(company_id: int, skip: int = 0, limit: int = 100, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "accountant"))):
     if not db.get(Company, company_id):
         raise HTTPException(status_code=404, detail="Company not found")
     get_company(company_id, db, user)
@@ -784,7 +803,7 @@ def get_employee(employee_id: int, db: Session = Depends(get_db), user: User = D
 
 
 @app.put("/employees/{employee_id}", response_model=EmployeeRead)
-def update_employee(employee_id: int, employee_in: EmployeeUpdate, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "accountant", "client_admin"))):
+def update_employee(employee_id: int, employee_in: EmployeeUpdate, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "accountant"))):
     employee = db.get(Employee, employee_id)
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
@@ -800,7 +819,7 @@ def update_employee(employee_id: int, employee_in: EmployeeUpdate, db: Session =
 
 
 @app.delete("/employees/{employee_id}", status_code=204)
-def delete_employee(employee_id: int, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "accountant", "client_admin"))):
+def delete_employee(employee_id: int, db: Session = Depends(get_db), user: User = Depends(require_roles("super_admin", "accountant"))):
     employee = db.get(Employee, employee_id)
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
@@ -908,7 +927,7 @@ def preview_payroll_from_employee(company_id: int, employee_id: int, user: User 
 def bulk_payroll_run(
     company_id: int,
     body: BulkPayrollRequest,
-    user: User = Depends(require_roles("super_admin", "accountant", "client_admin")),
+    user: User = Depends(require_roles("super_admin", "accountant")),
     db: Session = Depends(get_db)
 ):
     company = db.get(Company, company_id)
@@ -1018,7 +1037,7 @@ def bulk_payroll_run(
 def send_payslips(
     company_id: int,
     body: BulkPayrollRequest,
-    user: User = Depends(require_roles("super_admin", "accountant", "client_admin")),
+    user: User = Depends(require_roles("super_admin", "accountant")),
     db: Session = Depends(get_db)
 ):
     smtp_host = os.environ.get("SMTP_HOST")
@@ -1167,7 +1186,7 @@ def list_leave_balances(
 def create_leave_balance(
     employee_id: int,
     body: LeaveBalanceCreate,
-    user: User = Depends(require_roles("super_admin", "accountant", "client_admin")),
+    user: User = Depends(require_roles("super_admin", "accountant")),
     db: Session = Depends(get_db)
 ):
     emp = db.get(Employee, employee_id)
@@ -1196,7 +1215,7 @@ def update_leave_balance(
     employee_id: int,
     balance_id: int,
     body: LeaveBalanceUpdate,
-    user: User = Depends(require_roles("super_admin", "accountant", "client_admin")),
+    user: User = Depends(require_roles("super_admin", "accountant")),
     db: Session = Depends(get_db)
 ):
     emp = db.get(Employee, employee_id)
@@ -1223,7 +1242,7 @@ def update_leave_balance(
 def delete_leave_balance(
     employee_id: int,
     balance_id: int,
-    user: User = Depends(require_roles("super_admin", "accountant", "client_admin")),
+    user: User = Depends(require_roles("super_admin", "accountant")),
     db: Session = Depends(get_db)
 ):
     emp = db.get(Employee, employee_id)
@@ -1249,6 +1268,7 @@ def get_dashboard_stats(user: User = Depends(get_current_user), db: Session = De
         cids = set()
         if "accountant" in roles:
             cids |= {a.company_id for a in db.query(AccountantAssignment).filter_by(accountant_user_id=user.id).all()}
+        # TODO: remove client_admin scope after data migration is confirmed
         if "client_admin" in roles:
             cids |= {uc.company_id for uc in db.query(UserCompany).filter_by(user_id=user.id).all()}
         company_ids = list(cids)
@@ -1301,6 +1321,14 @@ def get_dashboard_stats(user: User = Depends(get_current_user), db: Session = De
                 "timestamp": e.timestamp.isoformat()
             })
 
+    pending_leave = 0
+    pending_documents = 0
+    pending_banking = 0
+    if "super_admin" in roles:
+        pending_leave = db.query(LeaveRequest).filter(LeaveRequest.status == "pending").count()
+        pending_documents = db.query(EmployeeDocument).filter(EmployeeDocument.status == "pending").count()
+        pending_banking = db.query(BankingChangeRequest).filter(BankingChangeRequest.status == "pending").count()
+
     return {
         "companies": len(company_ids),
         "employees": {"total": len(all_employees), "active": active_count, "inactive": len(all_employees) - active_count},
@@ -1311,6 +1339,9 @@ def get_dashboard_stats(user: User = Depends(get_current_user), db: Session = De
             "employees_processed": len({r.employee_id for r in month_records if r.employee_id})
         },
         "pending_approvals": pending_count,
+        "pending_leave": pending_leave,
+        "pending_documents": pending_documents,
+        "pending_banking": pending_banking,
         "alerts": alerts[:15],
         "recent_activity": recent_activity
     }
@@ -1321,7 +1352,7 @@ def get_dashboard_stats(user: User = Depends(get_current_user), db: Session = De
 def submit_payroll(
     company_id: int,
     body: PayrollApprovalRequest,
-    user: User = Depends(require_roles("super_admin", "accountant", "client_admin")),
+    user: User = Depends(require_roles("super_admin", "accountant")),
     db: Session = Depends(get_db)
 ):
     get_company(company_id, db, user)
@@ -1344,7 +1375,7 @@ def submit_payroll(
 def approve_payroll(
     company_id: int,
     body: PayrollApprovalRequest,
-    user: User = Depends(require_roles("super_admin", "client_admin")),
+    user: User = Depends(require_roles("super_admin")),
     db: Session = Depends(get_db)
 ):
     get_company(company_id, db, user)
@@ -1370,7 +1401,7 @@ def approve_payroll(
 def reject_payroll(
     company_id: int,
     body: PayrollApprovalRequest,
-    user: User = Depends(require_roles("super_admin", "client_admin")),
+    user: User = Depends(require_roles("super_admin")),
     db: Session = Depends(get_db)
 ):
     get_company(company_id, db, user)
@@ -1423,7 +1454,7 @@ def get_payroll_period_status(
 def import_employees(
     company_id: int,
     employees_data: List[EmployeeCreate],
-    user: User = Depends(require_roles("super_admin", "accountant", "client_admin")),
+    user: User = Depends(require_roles("super_admin", "accountant")),
     db: Session = Depends(get_db)
 ):
     company = db.get(Company, company_id)
@@ -1457,7 +1488,7 @@ def list_audit_events(
     limit: int = Query(50, le=200),
     offset: int = Query(0),
     action: Optional[str] = Query(None),
-    user: User = Depends(require_roles("super_admin", "accountant", "client_admin")),
+    user: User = Depends(require_roles("super_admin", "accountant")),
     db: Session = Depends(get_db)
 ):
     q = db.query(AuditEvent).order_by(AuditEvent.timestamp.desc())
@@ -1618,7 +1649,7 @@ def submit_leave_request(
 def list_company_leave_requests(
     company_id: int,
     status: Optional[str] = Query(None),
-    user: User = Depends(require_roles("super_admin", "accountant", "client_admin")),
+    user: User = Depends(require_roles("super_admin", "accountant")),
     db: Session = Depends(get_db)
 ):
     get_company(company_id, db, user)
@@ -1648,7 +1679,7 @@ def list_company_leave_requests(
 def review_leave_request(
     request_id: int,
     body: LeaveRequestReview,
-    user: User = Depends(require_roles("super_admin", "accountant", "client_admin")),
+    user: User = Depends(require_roles("super_admin")),
     db: Session = Depends(get_db)
 ):
     req = db.get(LeaveRequest, request_id)
@@ -1750,7 +1781,7 @@ def payroll_summary(
     company_id: int = Query(...),
     year: int = Query(...),
     month: Optional[int] = Query(None),
-    user: User = Depends(require_roles("super_admin", "accountant", "client_admin")),
+    user: User = Depends(require_roles("super_admin", "accountant")),
     db: Session = Depends(get_db)
 ):
     get_company(company_id, db, user)
@@ -1795,7 +1826,7 @@ def payroll_summary(
 def payroll_analytics(
     company_id: int = Query(...),
     year: int = Query(...),
-    user: User = Depends(require_roles("super_admin", "accountant", "client_admin")),
+    user: User = Depends(require_roles("super_admin", "accountant")),
     db: Session = Depends(get_db)
 ):
     get_company(company_id, db, user)
@@ -1838,7 +1869,7 @@ def export_payroll_csv(
     company_id: int = Query(...),
     year: int = Query(...),
     month: Optional[int] = Query(None),
-    user: User = Depends(require_roles("super_admin", "accountant", "client_admin")),
+    user: User = Depends(require_roles("super_admin", "accountant")),
     db: Session = Depends(get_db)
 ):
     import csv as csv_mod
@@ -1884,7 +1915,7 @@ def emp201_report(
     company_id: int = Query(...),
     year: int = Query(...),
     month: int = Query(...),
-    user: User = Depends(require_roles("super_admin", "accountant", "client_admin")),
+    user: User = Depends(require_roles("super_admin", "accountant")),
     db: Session = Depends(get_db)
 ):
     """EMP201 monthly PAYE/UIF/SDL declaration summary for SARS."""
@@ -1941,7 +1972,7 @@ def emp201_download(
     company_id: int = Query(...),
     year: int = Query(...),
     month: int = Query(...),
-    user: User = Depends(require_roles("super_admin", "accountant", "client_admin")),
+    user: User = Depends(require_roles("super_admin", "accountant")),
     db: Session = Depends(get_db)
 ):
     """Download EMP201 summary as CSV."""
@@ -1976,7 +2007,7 @@ def emp201_download(
 def irp5_download(
     company_id: int = Query(...),
     year: int = Query(...),
-    user: User = Depends(require_roles("super_admin", "accountant", "client_admin")),
+    user: User = Depends(require_roles("super_admin", "accountant")),
     db: Session = Depends(get_db)
 ):
     """IRP5/IT3(a) annual employee tax certificates — CSV download."""
@@ -2055,7 +2086,7 @@ def irp5_download(
 def irp5_preview(
     company_id: int = Query(...),
     year: int = Query(...),
-    user: User = Depends(require_roles("super_admin", "accountant", "client_admin")),
+    user: User = Depends(require_roles("super_admin", "accountant")),
     db: Session = Depends(get_db)
 ):
     """IRP5 per-employee summary (JSON for frontend display)."""
@@ -2128,7 +2159,7 @@ def ui19_download(
     company_id: int = Query(...),
     year: int = Query(...),
     month: int = Query(...),
-    user: User = Depends(require_roles("super_admin", "accountant", "client_admin")),
+    user: User = Depends(require_roles("super_admin", "accountant")),
     db: Session = Depends(get_db)
 ):
     """UI-19 UIF monthly declaration CSV for Department of Labour portal upload."""
@@ -2195,7 +2226,7 @@ def eft_download(
     company_id: int = Query(...),
     year: int = Query(...),
     month: int = Query(...),
-    user: User = Depends(require_roles("super_admin", "accountant", "client_admin")),
+    user: User = Depends(require_roles("super_admin", "accountant")),
     db: Session = Depends(get_db)
 ):
     """EFT batch payment file — net salaries for bank upload."""
@@ -2245,6 +2276,253 @@ def eft_download(
         media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="EFT_{safe}_{period}.csv"'}
     )
+
+
+# ------------------ Leave Approvals (super_admin) ------------------
+
+@app.get("/leave/pending")
+def get_pending_leave_requests(
+    user: User = Depends(require_roles("super_admin")),
+    db: Session = Depends(get_db)
+):
+    """All pending leave requests across all companies."""
+    requests = db.query(LeaveRequest).filter(LeaveRequest.status == "pending").order_by(LeaveRequest.created_at.asc()).all()
+    result = []
+    for r in requests:
+        emp = db.get(Employee, r.employee_id)
+        company = db.get(Company, emp.company_id) if emp else None
+        result.append({
+            "id": r.id,
+            "employee_id": r.employee_id,
+            "employee_name": f"{emp.first_names} {emp.last_name}" if emp else f"Employee #{r.employee_id}",
+            "company_name": company.name if company else "—",
+            "leave_type": r.leave_type,
+            "start_date": r.start_date.isoformat(),
+            "end_date": r.end_date.isoformat(),
+            "days_requested": r.days_requested,
+            "reason": r.reason,
+            "created_at": r.created_at.isoformat(),
+            "status": r.status,
+        })
+    return result
+
+
+# ------------------ Employee Documents ------------------
+
+@app.post("/me/documents")
+async def upload_my_document(
+    document_type: str = Form(...),
+    description: str = Form(""),
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    link = db.query(EmployeeUser).filter_by(user_id=user.id).first()
+    if not link:
+        raise HTTPException(status_code=400, detail="No employee profile linked to your account")
+    raw = await file.read()
+    if len(raw) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File too large (max 5 MB)")
+    encoded = base64.b64encode(raw).decode()
+    doc = EmployeeDocument(
+        employee_id=link.employee_id,
+        uploaded_by=user.id,
+        document_type=document_type,
+        description=description or None,
+        file_name=file.filename or "document",
+        file_data=encoded,
+        file_size=len(raw),
+        status="pending"
+    )
+    db.add(doc)
+    log_audit(db, user.id, "document.upload", "employee", link.employee_id, {"type": document_type, "file": file.filename})
+    db.commit()
+    db.refresh(doc)
+    return {"ok": True, "id": doc.id, "status": doc.status}
+
+
+@app.get("/me/documents")
+def get_my_documents(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    link = db.query(EmployeeUser).filter_by(user_id=user.id).first()
+    if not link:
+        return []
+    docs = db.query(EmployeeDocument).filter(EmployeeDocument.employee_id == link.employee_id).order_by(EmployeeDocument.uploaded_at.desc()).all()
+    return [{
+        "id": d.id, "document_type": d.document_type, "description": d.description,
+        "file_name": d.file_name, "file_size": d.file_size, "status": d.status,
+        "rejection_reason": d.rejection_reason,
+        "uploaded_at": d.uploaded_at.isoformat()
+    } for d in docs]
+
+
+@app.get("/me/documents/{doc_id}/download")
+def download_my_document(doc_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    link = db.query(EmployeeUser).filter_by(user_id=user.id).first()
+    if not link:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    doc = db.get(EmployeeDocument, doc_id)
+    if not doc or doc.employee_id != link.employee_id:
+        raise HTTPException(status_code=404, detail="Document not found")
+    raw = base64.b64decode(doc.file_data)
+    return StreamingResponse(
+        io.BytesIO(raw), media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{doc.file_name}"'}
+    )
+
+
+@app.get("/documents/pending")
+def get_pending_documents(user: User = Depends(require_roles("super_admin")), db: Session = Depends(get_db)):
+    docs = db.query(EmployeeDocument).filter(EmployeeDocument.status == "pending").order_by(EmployeeDocument.uploaded_at.asc()).all()
+    result = []
+    for d in docs:
+        emp = db.get(Employee, d.employee_id)
+        company = db.get(Company, emp.company_id) if emp else None
+        result.append({
+            "id": d.id,
+            "employee_id": d.employee_id,
+            "employee_name": f"{emp.first_names} {emp.last_name}" if emp else f"Employee #{d.employee_id}",
+            "company_name": company.name if company else "—",
+            "document_type": d.document_type,
+            "description": d.description,
+            "file_name": d.file_name,
+            "file_size": d.file_size,
+            "uploaded_at": d.uploaded_at.isoformat(),
+            "status": d.status,
+        })
+    return result
+
+
+@app.get("/documents/{doc_id}/download")
+def download_document_admin(doc_id: int, user: User = Depends(require_roles("super_admin")), db: Session = Depends(get_db)):
+    doc = db.get(EmployeeDocument, doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    raw = base64.b64decode(doc.file_data)
+    return StreamingResponse(
+        io.BytesIO(raw), media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{doc.file_name}"'}
+    )
+
+
+@app.patch("/documents/{doc_id}/review")
+def review_document(
+    doc_id: int,
+    body: DocumentReviewRequest,
+    user: User = Depends(require_roles("super_admin")),
+    db: Session = Depends(get_db)
+):
+    doc = db.get(EmployeeDocument, doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    if body.status not in ("approved", "rejected"):
+        raise HTTPException(status_code=400, detail="status must be 'approved' or 'rejected'")
+    doc.status = body.status
+    doc.reviewed_by = user.id
+    doc.reviewed_at = datetime.utcnow()
+    doc.rejection_reason = body.reason if body.status == "rejected" else None
+    log_audit(db, user.id, f"document.{body.status}", "employee", doc.employee_id, {"doc_id": doc_id, "reason": body.reason})
+    db.commit()
+    return {"ok": True, "status": doc.status}
+
+
+# ------------------ Banking Change Requests ------------------
+
+@app.post("/banking-changes")
+def submit_banking_change(
+    body: BankingChangeCreate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    link = db.query(EmployeeUser).filter_by(user_id=user.id).first()
+    if not link:
+        raise HTTPException(status_code=400, detail="No employee profile linked to your account")
+    existing = db.query(BankingChangeRequest).filter_by(employee_id=link.employee_id, status="pending").first()
+    if existing:
+        raise HTTPException(status_code=400, detail="You already have a pending banking change request")
+    req = BankingChangeRequest(
+        employee_id=link.employee_id,
+        requested_by=user.id,
+        new_bank_name=body.new_bank_name,
+        new_account_number=body.new_account_number,
+        new_account_type=body.new_account_type,
+        new_branch_code=body.new_branch_code,
+        status="pending"
+    )
+    db.add(req)
+    log_audit(db, user.id, "banking_change.request", "employee", link.employee_id, {"bank": body.new_bank_name})
+    db.commit()
+    db.refresh(req)
+    return {"ok": True, "id": req.id}
+
+
+@app.get("/banking-changes/my")
+def get_my_banking_changes(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    link = db.query(EmployeeUser).filter_by(user_id=user.id).first()
+    if not link:
+        return []
+    reqs = db.query(BankingChangeRequest).filter_by(employee_id=link.employee_id).order_by(BankingChangeRequest.requested_at.desc()).all()
+    return [{
+        "id": r.id, "new_bank_name": r.new_bank_name, "new_account_number": r.new_account_number,
+        "new_account_type": r.new_account_type, "new_branch_code": r.new_branch_code,
+        "status": r.status, "requested_at": r.requested_at.isoformat(),
+        "rejection_reason": r.rejection_reason
+    } for r in reqs]
+
+
+@app.get("/banking-changes/pending")
+def get_pending_banking_changes(user: User = Depends(require_roles("super_admin")), db: Session = Depends(get_db)):
+    reqs = db.query(BankingChangeRequest).filter_by(status="pending").order_by(BankingChangeRequest.requested_at.asc()).all()
+    result = []
+    for r in reqs:
+        emp = db.get(Employee, r.employee_id)
+        company = db.get(Company, emp.company_id) if emp else None
+        result.append({
+            "id": r.id,
+            "employee_id": r.employee_id,
+            "employee_name": f"{emp.first_names} {emp.last_name}" if emp else f"Employee #{r.employee_id}",
+            "company_name": company.name if company else "—",
+            "current_bank_name": emp.bank_name if emp else None,
+            "current_account_number": emp.account_number if emp else None,
+            "current_account_type": emp.account_type if emp else None,
+            "current_branch_code": emp.branch_code if emp else None,
+            "new_bank_name": r.new_bank_name,
+            "new_account_number": r.new_account_number,
+            "new_account_type": r.new_account_type,
+            "new_branch_code": r.new_branch_code,
+            "status": r.status,
+            "requested_at": r.requested_at.isoformat(),
+        })
+    return result
+
+
+@app.patch("/banking-changes/{req_id}/review")
+def review_banking_change(
+    req_id: int,
+    body: BankingChangeReviewRequest,
+    user: User = Depends(require_roles("super_admin")),
+    db: Session = Depends(get_db)
+):
+    req = db.get(BankingChangeRequest, req_id)
+    if not req:
+        raise HTTPException(status_code=404, detail="Request not found")
+    if body.status not in ("approved", "rejected"):
+        raise HTTPException(status_code=400, detail="status must be 'approved' or 'rejected'")
+    req.status = body.status
+    req.reviewed_by = user.id
+    req.reviewed_at = datetime.utcnow()
+    req.rejection_reason = body.reason if body.status == "rejected" else None
+    if body.status == "approved":
+        emp = db.get(Employee, req.employee_id)
+        if emp:
+            emp.bank_name = req.new_bank_name or emp.bank_name
+            emp.account_number = req.new_account_number or emp.account_number
+            emp.account_type = req.new_account_type or emp.account_type
+            emp.branch_code = req.new_branch_code or emp.branch_code
+            if req.new_account_number and len(req.new_account_number) >= 4:
+                emp.bank_account_last4 = req.new_account_number[-4:]
+    log_audit(db, user.id, f"banking_change.{body.status}", "employee", req.employee_id, {"req_id": req_id, "reason": body.reason})
+    db.commit()
+    return {"ok": True, "status": req.status}
 
 
 if __name__ == "__main__":

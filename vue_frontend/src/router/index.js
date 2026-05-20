@@ -58,19 +58,37 @@ const router = createRouter({
       path: '/hr-reports',
       name: 'hrReports',
       component: () => import('../views/HRReportsView.vue'),
-      meta: { requiresAuth: true, roles: ['client_admin', 'super_admin', 'accountant'] }
+      meta: { requiresAuth: true, roles: ['super_admin', 'accountant'] }
     },
     {
       path: '/payroll/bulk',
       name: 'bulkPayroll',
       component: () => import('../views/BulkPayrollView.vue'),
-      meta: { requiresAuth: true, roles: ['super_admin', 'accountant', 'client_admin'] }
+      meta: { requiresAuth: true, roles: ['super_admin', 'accountant'] }
     },
     {
       path: '/audit',
       name: 'auditLog',
       component: () => import('../views/AuditLogView.vue'),
-      meta: { requiresAuth: true, roles: ['super_admin', 'accountant', 'client_admin'] }
+      meta: { requiresAuth: true, roles: ['super_admin', 'accountant'] }
+    },
+    {
+      path: '/approvals/leave',
+      name: 'leaveApprovals',
+      component: () => import('../views/LeaveApprovalsView.vue'),
+      meta: { requiresAuth: true, roles: ['super_admin'] }
+    },
+    {
+      path: '/approvals/documents',
+      name: 'documentApprovals',
+      component: () => import('../views/DocumentApprovalsView.vue'),
+      meta: { requiresAuth: true, roles: ['super_admin'] }
+    },
+    {
+      path: '/approvals/banking',
+      name: 'bankingApprovals',
+      component: () => import('../views/BankingApprovalsView.vue'),
+      meta: { requiresAuth: true, roles: ['super_admin'] }
     },
     {
       path: '/portal',
@@ -88,13 +106,13 @@ const router = createRouter({
       path: '/reports',
       name: 'reports',
       component: () => import('../views/ReportsView.vue'),
-      meta: { requiresAuth: true, roles: ['super_admin', 'accountant', 'client_admin'] }
+      meta: { requiresAuth: true, roles: ['super_admin', 'accountant'] }
     },
     {
       path: '/compliance',
       name: 'compliance',
       component: () => import('../views/ComplianceView.vue'),
-      meta: { requiresAuth: true, roles: ['super_admin', 'accountant', 'client_admin'] }
+      meta: { requiresAuth: true, roles: ['super_admin', 'accountant'] }
     }
   ]
 })
@@ -117,7 +135,7 @@ router.beforeEach(async (to, from, next) => {
     }
     // Redirect pure-employee users away from admin-oriented pages
     const isEmployeeOnly = auth.roles.includes('employee') &&
-      !auth.roles.some(r => ['super_admin', 'accountant', 'client_admin'].includes(r))
+      !auth.roles.some(r => ['super_admin', 'accountant'].includes(r))
     if (isEmployeeOnly && to.path === '/') {
       next('/portal')
       return

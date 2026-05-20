@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Date, ForeignKey, Table, Boolean, DateTime, Float
+from sqlalchemy import Column, Integer, String, Date, ForeignKey, Table, Boolean, DateTime, Float, Text
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from datetime import datetime
 from sqlalchemy.types import String as SAString
@@ -243,6 +243,49 @@ class LeaveRequest(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     employee = relationship("Employee", back_populates="leave_requests")
+
+
+class EmployeeDocument(Base):
+    __tablename__ = "employee_documents"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    employee_id: Mapped[int] = mapped_column(ForeignKey("employees.id", ondelete="CASCADE"), index=True)
+    uploaded_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    document_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    file_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    file_data: Mapped[str] = mapped_column(Text, nullable=False)  # base64-encoded
+    file_size: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    reviewed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    rejection_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    employee = relationship("Employee")
+    uploader = relationship("User", foreign_keys=[uploaded_by])
+    reviewer = relationship("User", foreign_keys=[reviewed_by])
+
+
+class BankingChangeRequest(Base):
+    __tablename__ = "banking_change_requests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    employee_id: Mapped[int] = mapped_column(ForeignKey("employees.id", ondelete="CASCADE"), index=True)
+    requested_by: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    new_bank_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    new_account_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    new_account_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    new_branch_code: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    requested_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    reviewed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    rejection_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+    employee = relationship("Employee")
+    requester = relationship("User", foreign_keys=[requested_by])
+    reviewer = relationship("User", foreign_keys=[reviewed_by])
 
 
 class AuditEvent(Base):

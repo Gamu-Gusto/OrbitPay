@@ -48,7 +48,7 @@ def verify_password(password: str, hashed: str) -> bool:
     return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
 
 
-def create_access_token(subject: str, roles: list[str]) -> str:
+def create_access_token(subject: str, roles: list[str], company_ids: list[int] = None) -> str:
     now = datetime.utcnow()
     payload = {
         "sub": subject,
@@ -56,6 +56,8 @@ def create_access_token(subject: str, roles: list[str]) -> str:
         "iat": now,
         "exp": now + timedelta(minutes=ACCESS_TOKEN_MINUTES),
     }
+    if company_ids is not None:
+        payload["company_ids"] = company_ids
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALG)
 
 

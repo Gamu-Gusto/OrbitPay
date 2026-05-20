@@ -32,11 +32,10 @@
           <select v-model="form.role" class="form-input">
             <option value="super_admin">Super Admin</option>
             <option value="accountant">Accountant</option>
-            <option value="client_admin">Client Company Admin</option>
             <option value="employee">Employee</option>
           </select>
         </div>
-        <div class="form-group" v-if="form.role === 'client_admin' || form.role === 'employee'">
+        <div class="form-group" v-if="form.role === 'employee'">
           <label class="form-label">Company (optional for employee)</label>
           <select v-model.number="form.company_id" class="form-input">
             <option :value="0">Select company</option>
@@ -139,7 +138,7 @@ export default {
     const companies = ref([])
     const employees = ref([])
     const loading = ref(false)
-    const form = reactive({ email: '', password: '', first_name: '', last_name: '', role: 'client_admin', company_id: 0, employee_id: 0 })
+    const form = reactive({ email: '', password: '', first_name: '', last_name: '', role: 'accountant', company_id: 0, employee_id: 0 })
 
     const loadCompanies = async () => {
       try { const { data } = await axios.get(`${API}/companies`) ; companies.value = data } catch {}

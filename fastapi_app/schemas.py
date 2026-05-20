@@ -150,6 +150,7 @@ class UserRead(BaseModel):
     last_name: Optional[str] = None
     is_active: bool
     roles: List[str] = []
+    assigned_company_ids: List[int] = []
 
     class Config:
         from_attributes = True
@@ -279,6 +280,62 @@ class ClientAdminAssignRequest(BaseModel):
 class EmployeeLinkRequest(BaseModel):
     user_id: int
     employee_id: int
+
+
+# ------------------ Employee Documents ------------------
+class EmployeeDocumentRead(BaseModel):
+    id: int
+    employee_id: int
+    document_type: str
+    description: Optional[str] = None
+    file_name: str
+    file_size: int
+    status: str
+    rejection_reason: Optional[str] = None
+    uploaded_at: str
+    uploaded_by_name: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class DocumentReviewRequest(BaseModel):
+    status: str  # "approved" | "rejected"
+    reason: Optional[str] = None
+
+
+# ------------------ Banking Change Requests ------------------
+class BankingChangeCreate(BaseModel):
+    new_bank_name: Optional[str] = None
+    new_account_number: Optional[str] = None
+    new_account_type: Optional[str] = None
+    new_branch_code: Optional[str] = None
+
+
+class BankingChangeRead(BaseModel):
+    id: int
+    employee_id: int
+    employee_name: Optional[str] = None
+    company_name: Optional[str] = None
+    new_bank_name: Optional[str] = None
+    new_account_number: Optional[str] = None
+    new_account_type: Optional[str] = None
+    new_branch_code: Optional[str] = None
+    current_bank_name: Optional[str] = None
+    current_account_number: Optional[str] = None
+    current_account_type: Optional[str] = None
+    current_branch_code: Optional[str] = None
+    status: str
+    requested_at: str
+    rejection_reason: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class BankingChangeReviewRequest(BaseModel):
+    status: str  # "approved" | "rejected"
+    reason: Optional[str] = None
 
 
 

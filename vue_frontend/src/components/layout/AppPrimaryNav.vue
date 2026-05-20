@@ -34,7 +34,7 @@
       </router-link>
 
       <router-link
-        v-if="hasRole(['super_admin','accountant','client_admin'])"
+        v-if="hasRole(['super_admin','accountant'])"
         to="/payroll/bulk"
         class="nav-link"
         :class="{ 'is-active': isBulk }"
@@ -56,7 +56,7 @@
       </router-link>
 
       <router-link
-        v-if="hasRole(['super_admin','client_admin','accountant'])"
+        v-if="hasRole(['super_admin','accountant'])"
         to="/hr-reports"
         class="nav-link"
         :class="{ 'is-active': isHR }"
@@ -81,6 +81,57 @@
           <path d="M18 14l2 2 4-4" stroke-linecap="round"/>
         </svg>
         <span>Admin</span>
+      </router-link>
+
+      <span v-if="hasRole(['super_admin'])" class="nav-section-label" style="margin-top:8px">Approvals</span>
+
+      <router-link
+        v-if="hasRole(['super_admin'])"
+        to="/approvals/leave"
+        class="nav-link"
+        :class="{ 'is-active': isLeaveApprovals }"
+        @click="$emit('close')"
+        data-label="Leave Approvals"
+      >
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/>
+          <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+          <path d="M9 16l2 2 4-4"/>
+        </svg>
+        <span>Leave Approvals</span>
+        <span v-if="pendingCounts.leave > 0" class="nav-badge">{{ pendingCounts.leave }}</span>
+      </router-link>
+
+      <router-link
+        v-if="hasRole(['super_admin'])"
+        to="/approvals/documents"
+        class="nav-link"
+        :class="{ 'is-active': isDocApprovals }"
+        @click="$emit('close')"
+        data-label="Document Approvals"
+      >
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <path d="M9 15l2 2 4-4"/>
+        </svg>
+        <span>Doc Approvals</span>
+        <span v-if="pendingCounts.documents > 0" class="nav-badge">{{ pendingCounts.documents }}</span>
+      </router-link>
+
+      <router-link
+        v-if="hasRole(['super_admin'])"
+        to="/approvals/banking"
+        class="nav-link"
+        :class="{ 'is-active': isBankApprovals }"
+        @click="$emit('close')"
+        data-label="Banking Approvals"
+      >
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path d="M3 21h18M3 10h18M5 21V10M19 21V10M12 6l9 4H3l9-4z"/>
+        </svg>
+        <span>Banking Approvals</span>
+        <span v-if="pendingCounts.banking > 0" class="nav-badge">{{ pendingCounts.banking }}</span>
       </router-link>
 
       <router-link
@@ -182,9 +233,10 @@
 </template>
 
 <script>
-import { computed } from 'vue'
+import { computed, reactive, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '../../stores/auth'
+import axios from 'axios'
 
 export default {
   name: 'AppPrimaryNav',
@@ -199,17 +251,39 @@ export default {
 
     const hasRole = (roles) => auth.roles?.some(r => roles.includes(r))
 
-    const isDashboard = computed(() => route.path === '/')
-    const isPayroll   = computed(() => route.path === '/payroll')
-    const isBulk      = computed(() => route.path === '/payroll/bulk')
-    const isCompanies = computed(() => route.path.startsWith('/companies'))
-    const isHR        = computed(() => route.path.startsWith('/hr-reports'))
-    const isAdmin     = computed(() => route.path.startsWith('/admin'))
-    const isAudit      = computed(() => route.path === '/audit')
-    const isReports    = computed(() => route.path === '/reports')
-    const isPortal     = computed(() => route.path === '/portal')
-    const isLeave      = computed(() => route.path === '/leave')
-    const isCompliance = computed(() => route.path === '/compliance')
+    const isDashboard    = computed(() => route.path === '/')
+    const isPayroll      = computed(() => route.path === '/payroll')
+    const isBulk         = computed(() => route.path === '/payroll/bulk')
+    const isCompanies    = computed(() => route.path.startsWith('/companies'))
+    const isHR           = computed(() => route.path.startsWith('/hr-reports'))
+    const isAdmin        = computed(() => route.path.startsWith('/admin'))
+    const isAudit        = computed(() => route.path === '/audit')
+    const isReports      = computed(() => route.path === '/reports')
+    const isPortal       = computed(() => route.path === '/portal')
+    const isLeave        = computed(() => route.path === '/leave')
+    const isCompliance   = computed(() => route.path === '/compliance')
+    const isLeaveApprovals = computed(() => route.path === '/approvals/leave')
+    const isDocApprovals   = computed(() => route.path === '/approvals/documents')
+    const isBankApprovals  = computed(() => route.path === '/approvals/banking')
+
+    const pendingCounts = reactive({ leave: 0, documents: 0, banking: 0 })
+
+    const fetchPendingCounts = async () => {
+      if (!hasRole(['super_admin'])) return
+      try {
+        const { data } = await axios.get('/dashboard/stats')
+        pendingCounts.leave     = data.pending_leave     || 0
+        pendingCounts.documents = data.pending_documents || 0
+        pendingCounts.banking   = data.pending_banking   || 0
+      } catch {}
+    }
+
+    let interval = null
+    onMounted(() => {
+      fetchPendingCounts()
+      interval = setInterval(fetchPendingCounts, 60000)
+    })
+    onUnmounted(() => clearInterval(interval))
 
     const initials = computed(() => {
       const u = auth.user
@@ -234,7 +308,7 @@ export default {
       window.location.href = '/login'
     }
 
-    return { hasRole, isDashboard, isPayroll, isBulk, isCompanies, isHR, isAdmin, isAudit, isReports, isPortal, isLeave, isCompliance, initials, fullName, formattedRole, logout }
+    return { hasRole, isDashboard, isPayroll, isBulk, isCompanies, isHR, isAdmin, isAudit, isReports, isPortal, isLeave, isCompliance, isLeaveApprovals, isDocApprovals, isBankApprovals, pendingCounts, initials, fullName, formattedRole, logout }
   }
 }
 </script>
@@ -397,6 +471,22 @@ export default {
 }
 
 .nav-link.is-active .nav-icon { opacity: 1; }
+
+.nav-badge {
+  margin-left: auto;
+  background: #ef4444;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+  flex-shrink: 0;
+}
 
 /* ── Collapse toggle ──────────────────────────────────────────────────────── */
 .sidebar-collapse-btn {

@@ -8,7 +8,7 @@
         <p class="page-sub">{{ greeting }}, {{ firstName }}. Here's what needs your attention.</p>
       </div>
       <div class="header-actions">
-        <router-link to="/payroll/bulk" class="btn-primary" v-if="hasRole(['super_admin','accountant','client_admin'])">Run Payroll</router-link>
+        <router-link to="/payroll/bulk" class="btn-primary" v-if="hasRole(['super_admin','accountant'])">Run Payroll</router-link>
       </div>
     </div>
 
@@ -75,6 +75,50 @@
         </div>
       </div>
 
+      <!-- Approval Queue Cards (super_admin only) -->
+      <div v-if="hasRole(['super_admin'])" class="approvals-grid">
+        <router-link to="/approvals/leave" class="approval-card" :class="stats.pending_leave > 0 ? 'approval-card--active' : ''">
+          <div class="approval-icon" :class="stats.pending_leave > 0 ? 'orange' : 'gray'">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/>
+              <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+            </svg>
+          </div>
+          <div class="approval-body">
+            <span class="approval-count">{{ stats.pending_leave || 0 }}</span>
+            <span class="approval-label">Leave Requests Pending</span>
+          </div>
+          <span v-if="stats.pending_leave > 0" class="approval-arrow">→</span>
+        </router-link>
+
+        <router-link to="/approvals/documents" class="approval-card" :class="stats.pending_documents > 0 ? 'approval-card--active' : ''">
+          <div class="approval-icon" :class="stats.pending_documents > 0 ? 'orange' : 'gray'">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
+            </svg>
+          </div>
+          <div class="approval-body">
+            <span class="approval-count">{{ stats.pending_documents || 0 }}</span>
+            <span class="approval-label">Documents Pending</span>
+          </div>
+          <span v-if="stats.pending_documents > 0" class="approval-arrow">→</span>
+        </router-link>
+
+        <router-link to="/approvals/banking" class="approval-card" :class="stats.pending_banking > 0 ? 'approval-card--active' : ''">
+          <div class="approval-icon" :class="stats.pending_banking > 0 ? 'orange' : 'gray'">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/>
+            </svg>
+          </div>
+          <div class="approval-body">
+            <span class="approval-count">{{ stats.pending_banking || 0 }}</span>
+            <span class="approval-label">Banking Changes Pending</span>
+          </div>
+          <span v-if="stats.pending_banking > 0" class="approval-arrow">→</span>
+        </router-link>
+      </div>
+
       <!-- Quick Actions -->
       <div class="quick-actions">
         <h2 class="section-title">Quick Actions</h2>
@@ -85,7 +129,7 @@
             </svg>
             Single Payslip
           </router-link>
-          <router-link to="/payroll/bulk" v-if="hasRole(['super_admin','accountant','client_admin'])" class="action-btn">
+          <router-link to="/payroll/bulk" v-if="hasRole(['super_admin','accountant'])" class="action-btn">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
               <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/>
               <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/>
@@ -98,7 +142,7 @@
             </svg>
             Manage Companies
           </router-link>
-          <router-link to="/hr-reports" v-if="hasRole(['super_admin','accountant','client_admin'])" class="action-btn">
+          <router-link to="/hr-reports" v-if="hasRole(['super_admin','accountant'])" class="action-btn">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
               <path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6m4 0h14M13 19v-10a2 2 0 00-2-2H9"/>
             </svg>
@@ -134,7 +178,7 @@
         </div>
 
         <!-- Recent Activity -->
-        <div class="card" v-if="hasRole(['super_admin','accountant','client_admin'])">
+        <div class="card" v-if="hasRole(['super_admin','accountant'])">
           <h2 class="section-title">
             <svg class="title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
@@ -331,12 +375,49 @@ export default {
 .view-all-link { display: block; text-align: center; font-size: 12px; color: var(--color-accent); text-decoration: none; margin-top: 12px; }
 .view-all-link:hover { text-decoration: underline; }
 
+/* Approval queue cards */
+.approvals-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.approval-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  text-decoration: none;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.approval-card:hover { border-color: var(--color-accent); box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+.approval-card--active { border-color: #fde68a; background: #fffbeb; }
+.approval-card--active:hover { border-color: #f59e0b; }
+
+.approval-icon {
+  width: 40px; height: 40px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.approval-icon svg { width: 20px; height: 20px; }
+.approval-icon.orange { background: #fff7ed; color: #f59e0b; }
+.approval-icon.gray { background: var(--color-bg-page); color: var(--color-text-muted); }
+
+.approval-body { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.approval-count { font-size: 22px; font-weight: 700; color: var(--color-text-base); line-height: 1.1; }
+.approval-label { font-size: 11.5px; color: var(--color-text-muted); }
+.approval-arrow { font-size: 16px; color: var(--color-accent); flex-shrink: 0; }
+
 @media (max-width: 900px) {
   .stats-grid { grid-template-columns: 1fr 1fr; }
+  .approvals-grid { grid-template-columns: 1fr 1fr; }
   .two-col { grid-template-columns: 1fr; }
 }
 @media (max-width: 540px) {
   .stats-grid { grid-template-columns: 1fr; }
+  .approvals-grid { grid-template-columns: 1fr; }
   .actions-row { flex-direction: column; }
 }
 </style>
