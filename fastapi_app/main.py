@@ -10,7 +10,7 @@ from sqlalchemy import text
 
 from core.limiter import limiter
 from db import Base, engine, SessionLocal
-from orm_models import Role
+from orm_models import Role, SystemConfig
 
 # Routers
 from routers.auth import router as auth_router
@@ -25,6 +25,7 @@ from routers.reports import router as reports_router
 from routers.audit_log import router as audit_log_router
 from routers.self_service import router as self_service_router
 from routers.registrations import router as registrations_router
+from routers.setup import router as setup_router
 from hr_reports import router as hr_reports_router
 
 
@@ -88,11 +89,24 @@ def seed_roles():
         db.close()
 
 
+def seed_system_config():
+    db = SessionLocal()
+    try:
+        if not db.get(SystemConfig, "admin_setup_complete"):
+            db.add(SystemConfig(key="admin_setup_complete", value="false"))
+            db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     run_migrations()
     Base.metadata.create_all(bind=engine)
     seed_roles()
+    seed_system_config()
     yield
 
 
@@ -138,6 +152,7 @@ app.include_router(reports_router)
 app.include_router(audit_log_router)
 app.include_router(self_service_router)
 app.include_router(registrations_router)
+app.include_router(setup_router)
 app.include_router(hr_reports_router, prefix="/api", tags=["hr-reports"])
 
 

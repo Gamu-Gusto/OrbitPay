@@ -3,6 +3,7 @@ import CompaniesView from '../views/CompaniesView.vue'
 import EmployeesView from '../views/EmployeesView.vue'
 import LoginView from '../views/LoginView.vue'
 import AdminAssignmentsView from '../views/AdminAssignmentsView.vue'
+import axios from 'axios'
 import { useAuthStore } from '../stores/auth'
 
 // Routes that employee-only users are allowed to access
@@ -128,6 +129,22 @@ const router = createRouter({
       name: 'managerDashboard',
       component: () => import('../views/DashboardView.vue'),
       meta: { requiresAuth: true }
+    },
+    {
+      path: '/admin/users',
+      name: 'userManagement',
+      component: () => import('../views/UserManagementView.vue'),
+      meta: { requiresAuth: true, permission: 'CREATE_USER' }
+    },
+    {
+      path: '/admin/setup',
+      name: 'adminSetup',
+      component: () => import('../views/AdminSetupView.vue'),
+    },
+    {
+      path: '/activate',
+      name: 'activate',
+      component: () => import('../views/ActivateView.vue'),
     }
   ]
 })
@@ -139,7 +156,16 @@ router.beforeEach(async (to, from, next) => {
     await auth.initializeAuth()
   }
 
-  const publicRoutes = ['/login', '/payslip']
+  const publicRoutes = ['/login', '/payslip', '/admin/setup', '/activate']
+
+  if (to.path === '/admin/setup') {
+    try {
+      const { data } = await axios.get('/auth/admin/setup-status')
+      if (data.setup_complete) { next('/login'); return }
+    } catch {}
+    next()
+    return
+  }
 
   if (publicRoutes.includes(to.path)) {
     if (auth.isAuthenticated) {

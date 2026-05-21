@@ -70,6 +70,19 @@ def send_registration_rejected_email(to_email: str, full_name: str, reason: str)
     _send_email(to_email, "OrbitPay — Registration Not Approved", body)
 
 
+def send_activation_email(to_email: str, full_name: str, role: str, activation_link: str) -> None:
+    body = (
+        f"Hello {full_name},\n\n"
+        f"You have been invited to OrbitPay as {role}.\n\n"
+        f"Click the link below to activate your account and set your password:\n"
+        f"{activation_link}\n\n"
+        f"This link expires in 72 hours.\n\n"
+        f"If you did not expect this email, you can safely ignore it.\n\n"
+        f"— The OrbitPay Team"
+    )
+    _send_email(to_email, "You have been invited to OrbitPay", body)
+
+
 def send_welcome_email(to_email: str, full_name: str, temp_password: str, frontend_url: str) -> None:
     login_url = f"{frontend_url}/login"
     body = (

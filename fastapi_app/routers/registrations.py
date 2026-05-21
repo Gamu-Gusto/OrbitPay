@@ -4,11 +4,9 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from auth import hash_password
 from core.audit import log_audit
 from core.email import (
     send_registration_approved_email,
-    send_registration_received_email,
     send_registration_rejected_email,
 )
 from core.guards import require_permission
@@ -17,11 +15,9 @@ from orm_models import (
     AccountantRegistrationRequest,
     Role,
     User,
-    UserCompany,
     UserRole,
 )
 from schemas import (
-    AccountantRegistrationCreate,
     AccountantRegistrationRead,
     AccountantRegistrationReview,
 )
@@ -29,37 +25,12 @@ from schemas import (
 router = APIRouter(tags=["registrations"])
 
 
-@router.post("/auth/register/accountant", status_code=201)
-def register_accountant(body: AccountantRegistrationCreate, db: Session = Depends(get_db)):
-    # Block if email already exists in users table
-    if db.query(User).filter(User.email == body.email).first():
-        raise HTTPException(status_code=400, detail="Email already registered")
-    # Block duplicate pending requests
-    existing = db.query(AccountantRegistrationRequest).filter(
-        AccountantRegistrationRequest.email == body.email,
-        AccountantRegistrationRequest.status == "pending",
-    ).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="A pending registration already exists for this email")
-
-    reg = AccountantRegistrationRequest(
-        full_name=body.full_name,
-        email=body.email.lower(),
-        password_hash=hash_password(body.password),
-        firm_name=body.firm_name,
-        phone=body.phone,
-        status="pending",
+@router.post("/auth/register/accountant", status_code=410)
+def register_accountant():
+    raise HTTPException(
+        status_code=410,
+        detail="Registration is not available. Contact your administrator.",
     )
-    db.add(reg)
-    db.commit()
-
-    frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:5173")
-    try:
-        send_registration_received_email(body.email, body.full_name)
-    except Exception:
-        pass
-
-    return {"message": "Registration submitted for review"}
 
 
 @router.get("/accountant-registrations", response_model=list[AccountantRegistrationRead])

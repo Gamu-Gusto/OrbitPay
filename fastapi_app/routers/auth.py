@@ -21,6 +21,7 @@ from core.limiter import limiter
 from db import get_db
 from orm_models import (
     AccountantAssignment,
+    ActivationToken,
     EmployeeUser,
     PasswordResetToken,
     RefreshToken,
@@ -30,6 +31,7 @@ from orm_models import (
     UserRole,
 )
 from schemas import (
+    ActivateAccountRequest,
     ChangePasswordRequest,
     LoginRequest,
     LogoutRequest,
@@ -90,11 +92,6 @@ def login(request: Request, req: LoginRequest, db: Session = Depends(get_db)):
             db.commit()
             raise HTTPException(status_code=401, detail="Invalid credentials")
         roles = [db.get(Role, ur.role_id).name for ur in user.roles]
-        is_employee_only = "employee" in roles and not any(r in roles for r in ("super_admin", "accountant", "manager"))
-        if req.login_context == "employee" and not is_employee_only:
-            raise HTTPException(status_code=403, detail="Use Staff Access to log in")
-        if req.login_context == "staff" and is_employee_only:
-            raise HTTPException(status_code=403, detail="Use Employee Login to log in")
         company_ids = []
         if "accountant" in roles:
             company_ids = [
@@ -179,6 +176,29 @@ def refresh_access_token(request: Request, body: RefreshRequest, db: Session = D
         refresh_token=raw_refresh,
         user=_user_read(user, roles, company_ids),
     )
+
+
+@router.post("/activate")
+def activate_account(body: ActivateAccountRequest, db: Session = Depends(get_db)):
+    if body.new_password != body.confirm_password:
+        raise HTTPException(status_code=400, detail="Passwords do not match")
+    token_hash = hash_refresh_token(body.token)
+    record = db.query(ActivationToken).filter_by(token_hash=token_hash).first()
+    if not record or record.used_at or record.expires_at < datetime.utcnow():
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid or expired activation link. Contact your administrator for a new invitation.",
+        )
+    user = db.get(User, record.user_id)
+    if not user:
+        raise HTTPException(status_code=400, detail="User not found")
+    user.password_hash = hash_password(body.new_password)
+    user.is_active = True
+    user.force_password_change = False
+    record.used_at = datetime.utcnow()
+    log_audit(db, user.id, "account.activated", "user", user.id)
+    db.commit()
+    return {"message": "Account activated. You can now log in."}
 
 
 @router.post("/change-password")

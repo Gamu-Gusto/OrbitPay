@@ -281,6 +281,42 @@
         </div>
       </section>
 
+      <!-- My Requests unified timeline -->
+      <section class="section">
+        <h2 class="section-title">My Requests</h2>
+        <div class="card">
+          <div v-if="allRequests.length === 0" class="empty-state">No requests submitted yet.</div>
+          <div v-else class="timeline">
+            <div v-for="item in allRequests" :key="item._key" class="timeline-item">
+              <div class="tl-icon-wrap">
+                <div class="tl-icon" :class="item._type">
+                  <svg v-if="item._type === 'leave'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+                  </svg>
+                  <svg v-else-if="item._type === 'document'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/>
+                  </svg>
+                  <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/>
+                  </svg>
+                </div>
+              </div>
+              <div class="tl-body">
+                <div class="tl-header">
+                  <span class="tl-label">{{ item._label }}</span>
+                  <span class="badge" :class="statusBadge(item.status)">{{ item.status }}</span>
+                </div>
+                <p class="tl-detail">{{ item._detail }}</p>
+                <p class="tl-date">{{ fmtDate(item._date) }}</p>
+                <p v-if="item.rejection_reason || item.reason" class="tl-reason">
+                  Reason: {{ item.rejection_reason || item.reason }}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- Banking Change Request -->
       <section class="section">
         <h2 class="section-title">Banking Details</h2>
@@ -459,6 +495,35 @@ export default {
       }
     }
 
+    const allRequests = computed(() => {
+      const items = []
+      leaveRequests.value.forEach(r => items.push({
+        ...r,
+        _key: `leave-${r.id}`,
+        _type: 'leave',
+        _label: `Leave · ${r.leave_type}`,
+        _detail: `${fmtDate(r.start_date)} – ${fmtDate(r.end_date)} (${r.days_requested} day${r.days_requested !== 1 ? 's' : ''})`,
+        _date: r.created_at,
+      }))
+      documents.value.forEach(d => items.push({
+        ...d,
+        _key: `doc-${d.id}`,
+        _type: 'document',
+        _label: `Document · ${d.document_type}`,
+        _detail: d.file_name,
+        _date: d.uploaded_at || d.created_at,
+      }))
+      bankingChanges.value.forEach(b => items.push({
+        ...b,
+        _key: `bank-${b.id}`,
+        _type: 'banking',
+        _label: 'Banking change request',
+        _detail: `${b.new_bank_name} · ${b.new_account_number}`,
+        _date: b.created_at,
+      }))
+      return items.sort((a, b) => new Date(b._date) - new Date(a._date))
+    })
+
     const companyName = computed(() => {
       if (payslips.value.length > 0) return payslips.value[0].company_name || ''
       return ''
@@ -563,6 +628,7 @@ export default {
       downloading, page, pageSize, totalPages, pagedPayslips,
       companyName, avatarInitials, dismissedPwBanner,
       recentPayslips, pendingLeaveCount, pendingDocCount, pendingBankCount,
+      allRequests,
       prevPage, nextPage,
       fmtMoney, fmtDate, statusBadge, downloadPayslip,
       // Documents
@@ -929,4 +995,31 @@ export default {
 }
 .count-yellow { background: #fef9c3; color: #854d0e; }
 .count-zero { background: #dcfce7; color: #15803d; }
+
+/* My Requests timeline */
+.timeline { display: flex; flex-direction: column; }
+.timeline-item {
+  display: flex;
+  gap: 14px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.timeline-item:last-child { border-bottom: none; }
+
+.tl-icon-wrap { flex-shrink: 0; padding-top: 2px; }
+.tl-icon {
+  width: 32px; height: 32px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+}
+.tl-icon svg { width: 16px; height: 16px; }
+.tl-icon.leave { background: #dbeafe; color: #1d4ed8; }
+.tl-icon.document { background: #f3e8ff; color: #7c3aed; }
+.tl-icon.banking { background: #dcfce7; color: #15803d; }
+
+.tl-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.tl-header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tl-label { font-size: 13px; font-weight: 600; color: var(--color-text-base); }
+.tl-detail { font-size: 12px; color: var(--color-text-muted); margin: 0; }
+.tl-date { font-size: 11px; color: var(--color-text-muted); margin: 0; }
+.tl-reason { font-size: 11.5px; color: #b91c1c; margin: 0; font-style: italic; }
 </style>

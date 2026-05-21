@@ -180,7 +180,6 @@ class ChangePasswordRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
-    login_context: Optional[str] = None  # "employee" | "staff"
 
 
 class TokenResponse(BaseModel):
@@ -355,6 +354,29 @@ class BankingChangeRead(BaseModel):
 class BankingChangeReviewRequest(BaseModel):
     status: str  # "approved" | "rejected"
     reason: Optional[str] = None
+
+
+# ------------------ User Management ------------------
+class UserCreateRequest(BaseModel):
+    email: EmailStr
+    first_name: str
+    last_name: str
+    role: str  # super_admin | accountant | manager | employee
+    password: Optional[str] = Field(None, min_length=8, max_length=64)
+    confirm_password: Optional[str] = None
+
+
+class ActivateAccountRequest(BaseModel):
+    token: str
+    new_password: str = Field(..., min_length=8, max_length=64)
+    confirm_password: str
+
+
+class AdminSetupRequest(BaseModel):
+    full_name: str
+    email: EmailStr
+    password: str = Field(..., min_length=8, max_length=64)
+    confirm_password: str
 
 
 # ------------------ Accountant Registration ------------------
