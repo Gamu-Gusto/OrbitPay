@@ -241,6 +241,7 @@ def refresh_access_token(request: Request, body: RefreshRequest, db: Session = D
 
 
 @router.post("/forgot-password")
+@limiter.limit("5/minute")
 def forgot_password(
     request: Request,
     body: dict = Body(...),
@@ -280,6 +281,7 @@ def forgot_password(
 
 
 @router.post("/reset-password")
+@limiter.limit("5/minute")
 def reset_password(
     request: Request,
     body: dict = Body(...),

@@ -301,10 +301,7 @@ export default {
       return roles[0].replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
     })
 
-    const logout = () => {
-      auth.clear()
-      window.location.href = '/login'
-    }
+    const logout = () => { auth.logout() }
 
     return { auth, isDashboard, isPayroll, isBulk, isCompanies, isHR, isAdmin, isAudit, isReports, isPortal, isLeave, isCompliance, isLeaveApprovals, isDocApprovals, isBankApprovals, pendingCounts, initials, fullName, formattedRole, logout }
   }
