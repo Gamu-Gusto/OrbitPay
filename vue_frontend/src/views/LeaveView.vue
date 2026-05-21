@@ -213,11 +213,13 @@
 import { ref, computed, reactive, onMounted } from 'vue'
 import axios from 'axios'
 import { useAuthStore } from '../stores/auth'
+import { useLeaveFormatting } from '../composables/useLeaveFormatting'
 
 export default {
   name: 'LeaveView',
   setup() {
     const auth = useAuthStore()
+    const { fmtDate, statusLabel, statusBadge } = useLeaveFormatting()
 
     const isEmployee = computed(() => auth.roles.includes('employee'))
     const isManager = computed(() =>
@@ -355,34 +357,7 @@ export default {
       } catch { r._resubmitting = false }
     }
 
-    // ── Helpers ─────────────────────────────────────────
-    const fmtDate = (s) => {
-      if (!s) return '—'
-      try { return new Date(s).toLocaleDateString('en-ZA', { year: 'numeric', month: 'short', day: '2-digit' }) }
-      catch { return s }
-    }
 
-    const statusLabel = (s) => {
-      const map = {
-        pending: 'Pending',
-        under_review: 'Under Review',
-        request_documentation: 'Docs Requested',
-        approved: 'Approved',
-        rejected: 'Rejected',
-      }
-      return map[(s || '').toLowerCase()] || s
-    }
-
-    const statusBadge = (s) => {
-      const map = {
-        approved: 'badge-green',
-        rejected: 'badge-red',
-        pending: 'badge-yellow',
-        under_review: 'badge-blue',
-        request_documentation: 'badge-orange',
-      }
-      return map[(s || '').toLowerCase()] || 'badge-gray'
-    }
 
     onMounted(async () => {
       if (isEmployee.value) fetchEmployeeLeave()

@@ -81,10 +81,12 @@
 <script>
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
+import { useLeaveFormatting } from '../composables/useLeaveFormatting'
 
 export default {
   name: 'LeaveApprovalsView',
   setup() {
+    const { fmtDate, statusLabel, statusBadge } = useLeaveFormatting()
     const loading = ref(false)
     const requests = ref([])
 
@@ -145,34 +147,6 @@ export default {
         await axios.post(`/leave/requests/${r.id}/request-documents`, { reason: r._docsReason })
         await load()
       } catch { r._acting = false; r._requestingDocs = false }
-    }
-
-    const fmtDate = (s) => {
-      if (!s) return '—'
-      try { return new Date(s).toLocaleDateString('en-ZA', { year: 'numeric', month: 'short', day: '2-digit' }) }
-      catch { return s }
-    }
-
-    const statusLabel = (s) => {
-      const map = {
-        pending: 'Pending',
-        under_review: 'Under Review',
-        request_documentation: 'Docs Requested',
-        approved: 'Approved',
-        rejected: 'Rejected',
-      }
-      return map[s] || s
-    }
-
-    const statusBadge = (s) => {
-      const map = {
-        pending: 'badge-yellow',
-        under_review: 'badge-blue',
-        request_documentation: 'badge-orange',
-        approved: 'badge-green',
-        rejected: 'badge-red',
-      }
-      return map[s] || 'badge-gray'
     }
 
     onMounted(load)

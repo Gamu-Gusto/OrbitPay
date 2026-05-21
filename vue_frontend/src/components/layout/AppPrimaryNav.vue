@@ -279,7 +279,7 @@ export default {
     let interval = null
     onMounted(() => {
       fetchPendingCounts()
-      interval = setInterval(fetchPendingCounts, 60000)
+      interval = setInterval(fetchPendingCounts, 300000)
     })
     onUnmounted(() => clearInterval(interval))
 

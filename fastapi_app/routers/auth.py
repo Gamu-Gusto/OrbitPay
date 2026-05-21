@@ -1,6 +1,5 @@
 import os
 import secrets
-import hashlib
 import smtplib
 from datetime import datetime, timedelta
 from email.mime.multipart import MIMEMultipart
@@ -257,11 +256,10 @@ def forgot_password(
 
     user = db.query(User).filter(User.email == email).first()
     if user and user.is_active:
-        # Invalidate any existing unused tokens for this user
         db.query(PasswordResetToken).filter_by(user_id=user.id, used=False).update({"used": True})
 
         raw_token = secrets.token_urlsafe(48)
-        token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+        token_hash = hash_refresh_token(raw_token)
         db.add(PasswordResetToken(
             user_id=user.id,
             token_hash=token_hash,
@@ -295,7 +293,7 @@ def reset_password(
     if len(new_password) < 8:
         raise HTTPException(status_code=422, detail="Password must be at least 8 characters")
 
-    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+    token_hash = hash_refresh_token(raw_token)
     prt = db.query(PasswordResetToken).filter_by(token_hash=token_hash).first()
     if not prt or prt.used or prt.expires_at < datetime.utcnow():
         raise HTTPException(status_code=400, detail="Invalid or expired reset token")
@@ -306,7 +304,6 @@ def reset_password(
 
     user.password_hash = hash_password(new_password)
     prt.used = True
-    # Revoke all refresh tokens on password change
     db.query(RefreshToken).filter_by(user_id=user.id, revoked=False).update({"revoked": True})
     log_audit(db, user.id, "user.password_reset", "user", user.id, ip_address=_client_ip(request))
     db.commit()

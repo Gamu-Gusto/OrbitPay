@@ -140,16 +140,18 @@ def list_company_leave_requests(
     db: Session = Depends(get_db),
 ):
     get_company(company_id, db, user)
-    emp_ids = [e.id for e in db.query(Employee).filter(Employee.company_id == company_id).all()]
-    if not emp_ids:
+    company_employees = db.query(Employee).filter(Employee.company_id == company_id).all()
+    if not company_employees:
         return []
+    employees_map = {e.id: e for e in company_employees}
+    emp_ids = list(employees_map)
     q = db.query(LeaveRequest).filter(LeaveRequest.employee_id.in_(emp_ids))
     if status:
         q = q.filter(LeaveRequest.status == status)
     q = q.order_by(LeaveRequest.created_at.desc())
     result = []
     for r in q.all():
-        emp = db.get(Employee, r.employee_id)
+        emp = employees_map.get(r.employee_id)
         result.append({
             "id": r.id, "employee_id": r.employee_id,
             "employee_name": f"{emp.first_names} {emp.last_name}" if emp else f"Employee #{r.employee_id}",
