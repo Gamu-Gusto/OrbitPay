@@ -56,6 +56,7 @@ def run_migrations():
             ("leave_requests",  "documentation_requested_reason",       "TEXT"),
             ("audit_events",    "company_id",                           "INTEGER"),
             ("audit_events",    "ip_address",                           "TEXT"),
+            ("users",           "force_password_change",                "BOOLEAN DEFAULT FALSE"),
         ]
         for table, col, col_type in cols:
             try:

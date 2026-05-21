@@ -1,3 +1,4 @@
+import os
 from calendar import monthrange
 from datetime import date
 from typing import List, Tuple
@@ -5,13 +6,15 @@ from typing import List, Tuple
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from auth import hash_password
 from core.audit import log_audit
+from core.email import send_welcome_email
 from core.guards import get_current_user, require_permission
 from core.tenant import get_company
 from db import get_db
 from models import CompanyDetails, EmployeeDetails, PayslipData
-from orm_models import Company, Employee, EmployeeUser, User
-from schemas import EmployeeCreate, EmployeeImportResult, EmployeeRead, EmployeeUpdate
+from orm_models import Company, Employee, EmployeeUser, Role, User, UserCompany, UserRole
+from schemas import EmployeeCreateWithCredentials, EmployeeImportResult, EmployeeRead, EmployeeUpdate
 from utils import calculate_sdl, monthly_paye_from_gross, uif_employee
 
 router = APIRouter(tags=["employees"])
@@ -20,19 +23,59 @@ router = APIRouter(tags=["employees"])
 @router.post("/companies/{company_id}/employees", response_model=EmployeeRead)
 def create_employee(
     company_id: int,
-    employee_in: EmployeeCreate,
+    employee_in: EmployeeCreateWithCredentials,
     db: Session = Depends(get_db),
     user: User = Depends(require_permission("CREATE_EMPLOYEE")),
 ):
     if not db.get(Company, company_id):
         raise HTTPException(status_code=404, detail="Company not found")
     get_company(company_id, db, user)
-    employee = Employee(company_id=company_id, **employee_in.model_dump(exclude_unset=True))
+
+    # Validate credentials before creating employee (fail fast)
+    if employee_in.login_email:
+        if not employee_in.login_password:
+            raise HTTPException(status_code=400, detail="login_password is required when login_email is provided")
+        if db.query(User).filter(User.email == employee_in.login_email).first():
+            raise HTTPException(status_code=400, detail="A user with that email already exists")
+
+    employee_data = employee_in.model_dump(exclude_unset=True, exclude={"login_email", "login_password"})
+    employee = Employee(company_id=company_id, **employee_data)
     db.add(employee)
     db.flush()
+
+    # Create linked user account if credentials were provided
+    if employee_in.login_email and employee_in.login_password:
+        role = db.query(Role).filter(Role.name == "employee").first()
+        if not role:
+            raise HTTPException(status_code=500, detail="Employee role not found — run seed first")
+        new_user = User(
+            email=employee_in.login_email,
+            password_hash=hash_password(employee_in.login_password),
+            first_name=employee.first_names,
+            last_name=employee.last_name,
+            force_password_change=True,
+        )
+        db.add(new_user)
+        db.flush()
+        db.add(UserRole(user_id=new_user.id, role_id=role.id))
+        db.add(UserCompany(user_id=new_user.id, company_id=company_id))
+        db.add(EmployeeUser(user_id=new_user.id, employee_id=employee.id))
+
+        frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:5173")
+        try:
+            send_welcome_email(
+                to_email=employee_in.login_email,
+                full_name=f"{employee.first_names} {employee.last_name}",
+                temp_password=employee_in.login_password,
+                frontend_url=frontend_url,
+            )
+        except Exception:
+            pass  # Don't block employee creation if email delivery fails
+
     log_audit(
         db, user.id, "employee.create", "employee", employee.id,
-        {"name": f"{employee.first_names} {employee.last_name}", "company_id": company_id},
+        {"name": f"{employee.first_names} {employee.last_name}", "company_id": company_id,
+         "user_account_created": bool(employee_in.login_email)},
         company_id=company_id,
     )
     db.commit()
@@ -65,11 +108,6 @@ def get_employee(
         raise HTTPException(status_code=404, detail="Employee not found")
     roles = getattr(user, "role_names", [])
     if "super_admin" in roles:
-        return employee
-    if "employee" in roles:
-        link = db.query(EmployeeUser).filter_by(user_id=user.id, employee_id=employee_id).first()
-        if not link:
-            raise HTTPException(status_code=403, detail="Forbidden")
         return employee
     get_company(employee.company_id, db, user)
     return employee
@@ -220,7 +258,7 @@ def preview_payroll_from_employee(
 @router.post("/companies/{company_id}/employees/import", response_model=EmployeeImportResult)
 def import_employees(
     company_id: int,
-    employees_data: List[EmployeeCreate],
+    employees_data: List[EmployeeCreateWithCredentials],
     user: User = Depends(require_permission("IMPORT_EMPLOYEES")),
     db: Session = Depends(get_db),
 ):
@@ -232,7 +270,8 @@ def import_employees(
     errors: List[str] = []
     for i, emp_data in enumerate(employees_data):
         try:
-            emp = Employee(company_id=company_id, **emp_data.model_dump())
+            emp_dict = emp_data.model_dump(exclude={"login_email", "login_password"})
+            emp = Employee(company_id=company_id, **emp_dict)
             db.add(emp)
             created += 1
         except Exception as e:

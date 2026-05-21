@@ -2,9 +2,11 @@ import { createRouter, createWebHistory } from 'vue-router'
 import CompaniesView from '../views/CompaniesView.vue'
 import EmployeesView from '../views/EmployeesView.vue'
 import LoginView from '../views/LoginView.vue'
-import RegisterView from '../views/RegisterView.vue'
 import AdminAssignmentsView from '../views/AdminAssignmentsView.vue'
 import { useAuthStore } from '../stores/auth'
+
+// Routes that employee-only users are allowed to access
+const EMPLOYEE_ALLOWED = ['/portal', '/leave', '/change-password']
 
 const router = createRouter({
   history: createWebHistory(),
@@ -25,11 +27,6 @@ const router = createRouter({
       path: '/login',
       name: 'login',
       component: LoginView
-    },
-    {
-      path: '/register',
-      name: 'register',
-      component: RegisterView
     },
     {
       path: '/admin/assignments',
@@ -113,6 +110,12 @@ const router = createRouter({
       name: 'compliance',
       component: () => import('../views/ComplianceView.vue'),
       meta: { requiresAuth: true, permission: 'VIEW_PAYROLL_REPORTS' }
+    },
+    {
+      path: '/change-password',
+      name: 'changePassword',
+      component: () => import('../views/ChangePasswordView.vue'),
+      meta: { requiresAuth: true }
     }
   ]
 })
@@ -124,30 +127,41 @@ router.beforeEach(async (to, from, next) => {
     await auth.initializeAuth()
   }
 
-  const publicRoutes = ['/login', '/register', '/payslip']
+  const publicRoutes = ['/login', '/payslip']
 
   if (publicRoutes.includes(to.path)) {
-    auth.isAuthenticated ? next('/') : next()
-  } else {
-    if (!auth.isAuthenticated) {
-      next('/login')
-      return
+    if (auth.isAuthenticated) {
+      const isEmp = auth.roles.includes('employee') &&
+        !auth.roles.some(r => ['super_admin', 'accountant'].includes(r))
+      next(isEmp ? '/portal' : '/')
+    } else {
+      next()
     }
-    // Redirect pure-employee users away from admin-oriented pages
-    const isEmployeeOnly = auth.roles.includes('employee') &&
-      !auth.roles.some(r => ['super_admin', 'accountant'].includes(r))
-    if (isEmployeeOnly && to.path === '/') {
-      next('/portal')
-      return
-    }
-
-    const requiredPermission = to.meta?.permission
-    if (requiredPermission && !auth.hasPermission(requiredPermission)) {
-      next(isEmployeeOnly ? '/portal' : '/')
-      return
-    }
-    next()
+    return
   }
+
+  if (!auth.isAuthenticated) {
+    next('/login')
+    return
+  }
+
+  const isEmployeeOnly = auth.roles.includes('employee') &&
+    !auth.roles.some(r => ['super_admin', 'accountant'].includes(r))
+
+  // Block employees from all admin routes
+  if (isEmployeeOnly && !EMPLOYEE_ALLOWED.includes(to.path)) {
+    next('/portal')
+    return
+  }
+
+  // Enforce permission-gated routes
+  const requiredPermission = to.meta?.permission
+  if (requiredPermission && !auth.hasPermission(requiredPermission)) {
+    next(isEmployeeOnly ? '/portal' : '/')
+    return
+  }
+
+  next()
 })
 
 export default router

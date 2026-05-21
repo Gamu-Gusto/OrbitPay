@@ -15,6 +15,21 @@
       </div>
     </div>
 
+    <!-- Force password change banner -->
+    <div v-if="auth.forcePasswordChange && !dismissedPwBanner" class="pw-banner">
+      <svg class="pw-banner-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
+      </svg>
+      <div class="pw-banner-body">
+        <p class="pw-banner-title">Please change your password before continuing.</p>
+        <p class="pw-banner-sub">You are using a temporary password. Update it now to secure your account.</p>
+      </div>
+      <div class="pw-banner-actions">
+        <router-link to="/change-password" class="btn-primary btn-sm">Change password</router-link>
+        <button class="pw-banner-dismiss" @click="dismissedPwBanner = true" title="Dismiss">✕</button>
+      </div>
+    </div>
+
     <div v-if="loading" class="loading-state">
       <div class="spinner"></div>
       <span>Loading your portal…</span>
@@ -58,7 +73,62 @@
         </div>
       </div>
 
-      <!-- Leave balances -->
+      <!-- Dashboard summary row -->
+      <div class="dashboard-row">
+
+        <!-- Leave balances summary -->
+        <div class="card dash-card">
+          <p class="dash-card-title">Leave Balances</p>
+          <div v-if="leaveBalances.length === 0" class="dash-empty">No leave balances on record.</div>
+          <div v-else class="leave-summary-list">
+            <div v-for="b in leaveBalances" :key="b.leave_type" class="leave-summary-item">
+              <span class="leave-summary-type">{{ b.leave_type }}</span>
+              <span class="leave-summary-stat">
+                <span class="leave-remaining">{{ b.days_remaining }}</span>
+                <span class="leave-of"> of {{ b.days_allocated }} days remaining</span>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent payslips -->
+        <div class="card dash-card">
+          <p class="dash-card-title">Recent Payslips</p>
+          <div v-if="payslips.length === 0" class="dash-empty">No payslips found.</div>
+          <div v-else class="recent-payslips-list">
+            <div v-for="slip in recentPayslips" :key="slip.id" class="recent-payslip-row">
+              <span class="recent-payslip-period">{{ slip.period || '—' }}</span>
+              <span class="recent-payslip-net">{{ fmtMoney(slip.net_pay) }}</span>
+              <button @click="downloadPayslip(slip.id)" :disabled="downloading === slip.id" class="btn-light btn-sm">
+                {{ downloading === slip.id ? '…' : 'PDF' }}
+              </button>
+            </div>
+          </div>
+          <router-link v-if="payslips.length > 3" to="/portal" class="dash-view-all">View all payslips ↓</router-link>
+        </div>
+
+        <!-- Pending requests -->
+        <div class="card dash-card">
+          <p class="dash-card-title">Pending Requests</p>
+          <div class="pending-list">
+            <div class="pending-item">
+              <span class="pending-label">Leave requests</span>
+              <span class="pending-count" :class="pendingLeaveCount > 0 ? 'count-yellow' : 'count-zero'">{{ pendingLeaveCount }}</span>
+            </div>
+            <div class="pending-item">
+              <span class="pending-label">Documents</span>
+              <span class="pending-count" :class="pendingDocCount > 0 ? 'count-yellow' : 'count-zero'">{{ pendingDocCount }}</span>
+            </div>
+            <div class="pending-item">
+              <span class="pending-label">Banking changes</span>
+              <span class="pending-count" :class="pendingBankCount > 0 ? 'count-yellow' : 'count-zero'">{{ pendingBankCount }}</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Leave balances (full) -->
       <section class="section">
         <h2 class="section-title">Leave Balances</h2>
         <div v-if="leaveBalances.length === 0" class="empty-state">No leave balances on record.</div>
@@ -285,10 +355,12 @@
 <script>
 import { ref, computed, onMounted, reactive } from 'vue'
 import axios from 'axios'
+import { useAuthStore } from '../stores/auth'
 
 export default {
   name: 'EmployeePortalView',
   setup() {
+    const auth = useAuthStore()
     const loading = ref(true)
     const noProfile = ref(false)
     const profile = ref({})
@@ -297,6 +369,7 @@ export default {
     const leaveRequests = ref([])
     const downloading = ref(null)
     const page = ref(0)
+    const dismissedPwBanner = ref(false)
     const pageSize = 10
 
     // Documents
@@ -397,6 +470,12 @@ export default {
       return ((f[0] || '') + (l[0] || '')).toUpperCase() || '?'
     })
 
+    // Dashboard summary computeds
+    const recentPayslips = computed(() => payslips.value.slice(0, 3))
+    const pendingLeaveCount = computed(() => leaveRequests.value.filter(r => r.status === 'pending').length)
+    const pendingDocCount = computed(() => documents.value.filter(d => d.status === 'pending').length)
+    const pendingBankCount = computed(() => bankingChanges.value.filter(b => b.status === 'pending').length)
+
     const totalPages = computed(() => Math.max(1, Math.ceil(payslips.value.length / pageSize)))
 
     const pagedPayslips = computed(() => {
@@ -480,9 +559,10 @@ export default {
     onMounted(load)
 
     return {
-      loading, noProfile, profile, payslips, leaveBalances, leaveRequests,
+      auth, loading, noProfile, profile, payslips, leaveBalances, leaveRequests,
       downloading, page, pageSize, totalPages, pagedPayslips,
-      companyName, avatarInitials,
+      companyName, avatarInitials, dismissedPwBanner,
+      recentPayslips, pendingLeaveCount, pendingDocCount, pendingBankCount,
       prevPage, nextPage,
       fmtMoney, fmtDate, statusBadge, downloadPayslip,
       // Documents
@@ -785,5 +865,68 @@ export default {
   .form-grid-3 { grid-template-columns: 1fr; }
   .form-grid-2 { grid-template-columns: 1fr; }
   .banking-fields { flex-direction: column; gap: 6px; }
+  .dashboard-row { grid-template-columns: 1fr; }
 }
+
+/* ── Force-password-change banner ─────────────────────────────────────── */
+.pw-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  background: #fffbeb;
+  border: 1px solid #f59e0b;
+  border-radius: 10px;
+  padding: 16px 20px;
+}
+.pw-banner-icon { width: 22px; height: 22px; color: #d97706; flex-shrink: 0; margin-top: 2px; }
+.pw-banner-body { flex: 1; min-width: 0; }
+.pw-banner-title { font-size: 13.5px; font-weight: 600; color: #92400e; margin: 0 0 2px; }
+.pw-banner-sub { font-size: 12px; color: #92400e; margin: 0; }
+.pw-banner-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.pw-banner-dismiss {
+  background: none; border: none; color: #92400e; cursor: pointer;
+  font-size: 14px; padding: 2px 4px; line-height: 1;
+}
+.pw-banner-dismiss:hover { color: #78350f; }
+
+/* ── Dashboard summary row ─────────────────────────────────────────────── */
+.dashboard-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+.dash-card { padding: 18px; display: flex; flex-direction: column; gap: 12px; }
+.dash-card-title {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--color-text-muted); margin: 0;
+}
+.dash-empty { font-size: 12px; color: var(--color-text-muted); }
+.dash-view-all { font-size: 12px; color: var(--color-accent); text-decoration: none; }
+.dash-view-all:hover { text-decoration: underline; }
+
+/* Leave summary */
+.leave-summary-list { display: flex; flex-direction: column; gap: 8px; }
+.leave-summary-item { display: flex; flex-direction: column; gap: 2px; }
+.leave-summary-type { font-size: 12px; font-weight: 600; color: var(--color-text-base); }
+.leave-summary-stat { display: flex; align-items: baseline; gap: 3px; }
+.leave-remaining { font-size: 18px; font-weight: 700; color: #15803d; line-height: 1; }
+.leave-of { font-size: 11px; color: var(--color-text-muted); }
+
+/* Recent payslips */
+.recent-payslips-list { display: flex; flex-direction: column; gap: 8px; }
+.recent-payslip-row { display: flex; align-items: center; gap: 8px; }
+.recent-payslip-period { font-size: 12px; color: var(--color-text-base); flex: 1; }
+.recent-payslip-net { font-size: 12px; font-weight: 600; color: var(--color-text-base); white-space: nowrap; }
+
+/* Pending requests */
+.pending-list { display: flex; flex-direction: column; gap: 10px; }
+.pending-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pending-label { font-size: 12.5px; color: var(--color-text-base); }
+.pending-count {
+  min-width: 28px; height: 22px; border-radius: 11px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700;
+}
+.count-yellow { background: #fef9c3; color: #854d0e; }
+.count-zero { background: #dcfce7; color: #15803d; }
 </style>

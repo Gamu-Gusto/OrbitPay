@@ -19,6 +19,7 @@ export const useAuthStore = defineStore('auth', {
   getters: {
     isAuthenticated: (state) => !!state.accessToken,
     roles: (state) => state.user?.roles || [],
+    forcePasswordChange: (state) => !!state.user?.force_password_change,
     hasPermission: (state) => (permission) => {
       const ROLE_PERMISSIONS = {
         super_admin: [
@@ -43,7 +44,7 @@ export const useAuthStore = defineStore('auth', {
         employee: [
           'VIEW_OWN_PAYSLIPS', 'VIEW_OWN_LEAVE', 'APPLY_LEAVE',
           'UPLOAD_DOCUMENTS', 'SUBMIT_BANKING_CHANGE',
-          'UPDATE_PASSWORD', 'VIEW_OWN_PAYROLL_HISTORY', 'VIEW_EMPLOYEES',
+          'UPDATE_PASSWORD', 'VIEW_OWN_PAYROLL_HISTORY',
         ],
       }
       const userRoles = state.user?.roles || []
@@ -54,9 +55,16 @@ export const useAuthStore = defineStore('auth', {
     async initializeAuth() {
       if (!this.accessToken) return false
       try {
-        await axios.get('/auth/me', {
+        const { data } = await axios.get('/auth/me', {
           headers: { Authorization: `Bearer ${this.accessToken}` }
         })
+        // Merge fresh data (force_password_change may have changed)
+        this.user = { ...this.user, ...data }
+        try {
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('user', JSON.stringify(this.user))
+          }
+        } catch {}
         return true
       } catch {
         this.clear()

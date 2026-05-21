@@ -84,6 +84,11 @@ class EmployeeCreate(EmployeeBase):
     pass
 
 
+class EmployeeCreateWithCredentials(EmployeeCreate):
+    login_email: Optional[EmailStr] = None
+    login_password: Optional[str] = Field(None, min_length=8, max_length=64)
+
+
 class EmployeeUpdate(BaseModel):
     first_names: Optional[str] = None
     last_name: Optional[str] = None
@@ -149,6 +154,7 @@ class UserRead(BaseModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     is_active: bool
+    force_password_change: bool = False
     roles: List[str] = []
     assigned_company_ids: List[int] = []
 
@@ -164,6 +170,11 @@ class RegisterRequest(BaseModel):
     role: str
     company_id: Optional[int] = None
     employee_id: Optional[int] = None
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(..., min_length=8, max_length=64)
 
 
 class LoginRequest(BaseModel):

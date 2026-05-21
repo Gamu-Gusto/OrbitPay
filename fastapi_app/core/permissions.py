@@ -57,7 +57,6 @@ ROLE_PERMISSIONS: dict[str, List[str]] = {
         "SUBMIT_BANKING_CHANGE",
         "UPDATE_PASSWORD",
         "VIEW_OWN_PAYROLL_HISTORY",
-        "VIEW_EMPLOYEES",
     ],
 }
 

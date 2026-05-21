@@ -8,8 +8,8 @@
         <p class="brand-tagline">Payroll &amp; Reports Platform</p>
       </div>
 
-      <!-- Form -->
-      <div class="auth-form">
+      <!-- Login form -->
+      <div v-if="!showForgot" class="auth-form">
         <h2 class="form-heading">Sign in to your account</h2>
 
         <div class="form-group">
@@ -47,8 +47,38 @@
         </button>
 
         <p class="auth-footer">
-          Don't have an account?
-          <router-link to="/register">Create account</router-link>
+          <button class="link-btn" @click="showForgot = true">Forgot your password?</button>
+        </p>
+      </div>
+
+      <!-- Forgot password form -->
+      <div v-else class="auth-form">
+        <h2 class="form-heading">Reset your password</h2>
+        <p style="font-size:13px;color:var(--color-text-muted);margin-bottom:4px">
+          Enter your email and we'll send you a reset link if your account exists.
+        </p>
+
+        <div class="form-group">
+          <label class="form-label">Email address</label>
+          <input
+            v-model="forgotEmail"
+            type="email"
+            class="form-input"
+            placeholder="you@example.com"
+            autocomplete="email"
+            @keydown.enter="sendReset"
+          />
+        </div>
+
+        <div v-if="forgotMsg" class="auth-success">{{ forgotMsg }}</div>
+        <div v-if="forgotError" class="auth-error">{{ forgotError }}</div>
+
+        <button @click="sendReset" :disabled="forgotLoading" class="btn-primary w-full auth-submit">
+          {{ forgotLoading ? 'Sending…' : 'Send reset link' }}
+        </button>
+
+        <p class="auth-footer">
+          <button class="link-btn" @click="showForgot = false">← Back to sign in</button>
         </p>
       </div>
 
@@ -60,15 +90,23 @@
 import { ref } from 'vue'
 import axios from 'axios'
 import { useAuthStore } from '../stores/auth'
+import { useRouter } from 'vue-router'
 
 export default {
   name: 'LoginView',
   setup() {
+    const router   = useRouter()
     const email    = ref('')
     const password = ref('')
     const loading  = ref(false)
     const errorMsg = ref('')
     const auth     = useAuthStore()
+
+    const showForgot   = ref(false)
+    const forgotEmail  = ref('')
+    const forgotLoading = ref(false)
+    const forgotMsg    = ref('')
+    const forgotError  = ref('')
 
     const login = async () => {
       if (!email.value || !password.value) {
@@ -83,7 +121,9 @@ export default {
           password: password.value
         })
         auth.setAuth(data.access_token, data.user, data.refresh_token)
-        window.location.href = '/'
+        const isEmployee = (data.user?.roles || []).includes('employee') &&
+          !(data.user?.roles || []).some(r => ['super_admin', 'accountant'].includes(r))
+        router.push(isEmployee ? '/portal' : '/')
       } catch (e) {
         errorMsg.value = e.response?.data?.detail || 'Login failed. Please try again.'
       } finally {
@@ -91,7 +131,22 @@ export default {
       }
     }
 
-    return { email, password, loading, errorMsg, login }
+    const sendReset = async () => {
+      forgotMsg.value   = ''
+      forgotError.value = ''
+      if (!forgotEmail.value) { forgotError.value = 'Please enter your email address.'; return }
+      forgotLoading.value = true
+      try {
+        await axios.post('/auth/forgot-password', { email: forgotEmail.value })
+        forgotMsg.value = 'If that email exists, a reset link has been sent.'
+      } catch {
+        forgotError.value = 'Failed to send reset link. Please try again.'
+      } finally {
+        forgotLoading.value = false
+      }
+    }
+
+    return { email, password, loading, errorMsg, login, showForgot, forgotEmail, forgotLoading, forgotMsg, forgotError, sendReset }
   }
 }
 </script>
@@ -165,6 +220,15 @@ export default {
   color: #b91c1c;
 }
 
+.auth-success {
+  padding: 10px 12px;
+  background: #dcfce7;
+  border: 1px solid #86efac;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #15803d;
+}
+
 .auth-submit {
   height: 38px;
   font-size: 14px;
@@ -183,11 +247,18 @@ export default {
   text-align: center;
   font-size: 13px;
   color: var(--color-text-muted);
+  margin: 0;
 }
-.auth-footer a {
+
+.link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 13px;
   color: var(--color-accent);
-  text-decoration: none;
+  cursor: pointer;
+  font-family: inherit;
   font-weight: 500;
 }
-.auth-footer a:hover { text-decoration: underline; }
+.link-btn:hover { text-decoration: underline; }
 </style>

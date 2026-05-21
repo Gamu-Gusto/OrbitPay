@@ -1,9 +1,6 @@
 import os
 import secrets
-import smtplib
 from datetime import datetime, timedelta
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 from typing import Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
@@ -18,6 +15,7 @@ from auth import (
     verify_password,
 )
 from core.audit import log_audit
+from core.email import send_reset_email, send_welcome_email  # noqa: F401 (re-exported for employees router)
 from core.guards import get_current_user
 from core.limiter import limiter
 from db import get_db
@@ -32,10 +30,10 @@ from orm_models import (
     UserRole,
 )
 from schemas import (
+    ChangePasswordRequest,
     LoginRequest,
     LogoutRequest,
     RefreshRequest,
-    RegisterRequest,
     TokenResponse,
     UserRead,
 )
@@ -55,71 +53,26 @@ def _client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-def _send_reset_email(to_email: str, token: str, frontend_url: str) -> None:
-    smtp_host = os.environ.get("SMTP_HOST")
-    smtp_port = int(os.environ.get("SMTP_PORT", "587"))
-    smtp_user = os.environ.get("SMTP_USER")
-    smtp_pass = os.environ.get("SMTP_PASS")
-    smtp_from = os.environ.get("SMTP_FROM", smtp_user)
-    if not smtp_host or not smtp_user:
-        return  # Email not configured — token is still valid; admin can retrieve via audit log
-    reset_link = f"{frontend_url}/reset-password?token={token}"
-    msg = MIMEMultipart("alternative")
-    msg["From"] = smtp_from
-    msg["To"] = to_email
-    msg["Subject"] = "OrbitPay — Password Reset Request"
-    body = (
-        f"You requested a password reset.\n\n"
-        f"Click the link below (valid for {PASSWORD_RESET_MINUTES} minutes):\n{reset_link}\n\n"
-        f"If you did not request this, you can ignore this email."
+def _user_read(user: User, roles: list[str], company_ids: list[int] | None = None) -> UserRead:
+    return UserRead(
+        id=user.id,
+        email=user.email,
+        first_name=user.first_name,
+        last_name=user.last_name,
+        is_active=user.is_active,
+        force_password_change=bool(getattr(user, "force_password_change", False)),
+        roles=roles,
+        assigned_company_ids=company_ids or [],
     )
-    msg.attach(MIMEText(body, "plain"))
-    with smtplib.SMTP(smtp_host, smtp_port) as srv:
-        srv.starttls()
-        srv.login(smtp_user, smtp_pass)
-        srv.send_message(msg)
 
 
-@router.post("/register", response_model=UserRead)
-def register(req: RegisterRequest, db: Session = Depends(get_db)):
-    try:
-        role_name = (req.role or "").strip().lower()
-        if role_name not in ["super_admin", "accountant", "client_admin", "employee"]:
-            raise HTTPException(status_code=400, detail="Invalid role")
-        if db.query(User).filter(User.email == req.email).first():
-            raise HTTPException(status_code=400, detail="Email already registered")
-        password_hash = hash_password(req.password)
-        user = User(
-            email=req.email,
-            password_hash=password_hash,
-            first_name=req.first_name,
-            last_name=req.last_name,
-        )
-        db.add(user)
-        db.flush()
-        role = db.query(Role).filter(Role.name == role_name).first()
-        if not role:
-            raise HTTPException(status_code=400, detail="Invalid role")
-        db.add(UserRole(user_id=user.id, role_id=role.id))
-        if req.company_id and role_name in ("client_admin", "employee"):
-            db.add(UserCompany(user_id=user.id, company_id=req.company_id))
-        if req.employee_id and role_name == "employee":
-            db.add(EmployeeUser(user_id=user.id, employee_id=req.employee_id))
-        db.commit()
-        return UserRead(
-            id=user.id,
-            email=user.email,
-            first_name=user.first_name,
-            last_name=user.last_name,
-            is_active=user.is_active,
-            roles=[role_name],
-        )
-    except HTTPException:
-        db.rollback()
-        raise
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Registration failed: {str(e)}")
+# Self-registration is disabled — accounts are created by Super Admin only.
+@router.post("/register", status_code=410)
+def register():
+    raise HTTPException(
+        status_code=410,
+        detail="Self-registration is disabled. Contact your administrator.",
+    )
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -155,15 +108,7 @@ def login(request: Request, req: LoginRequest, db: Session = Depends(get_db)):
         return TokenResponse(
             access_token=token,
             refresh_token=raw_refresh,
-            user=UserRead(
-                id=user.id,
-                email=user.email,
-                first_name=user.first_name,
-                last_name=user.last_name,
-                is_active=user.is_active,
-                roles=roles,
-                assigned_company_ids=company_ids,
-            ),
+            user=_user_read(user, roles, company_ids),
         )
     except HTTPException:
         raise
@@ -172,15 +117,15 @@ def login(request: Request, req: LoginRequest, db: Session = Depends(get_db)):
 
 
 @router.get("/me", response_model=UserRead)
-def get_current_user_info(user: User = Depends(get_current_user)):
-    return UserRead(
-        id=user.id,
-        email=user.email,
-        first_name=user.first_name,
-        last_name=user.last_name,
-        is_active=user.is_active,
-        roles=getattr(user, "role_names", []),
-    )
+def get_current_user_info(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    roles = [db.get(Role, ur.role_id).name for ur in user.roles]
+    company_ids = []
+    if "accountant" in roles:
+        company_ids = [
+            a.company_id
+            for a in db.query(AccountantAssignment).filter_by(accountant_user_id=user.id).all()
+        ]
+    return _user_read(user, roles, company_ids)
 
 
 @router.post("/logout")
@@ -227,16 +172,23 @@ def refresh_access_token(request: Request, body: RefreshRequest, db: Session = D
     return TokenResponse(
         access_token=new_access,
         refresh_token=raw_refresh,
-        user=UserRead(
-            id=user.id,
-            email=user.email,
-            first_name=user.first_name,
-            last_name=user.last_name,
-            is_active=user.is_active,
-            roles=roles,
-            assigned_company_ids=company_ids,
-        ),
+        user=_user_read(user, roles, company_ids),
     )
+
+
+@router.post("/change-password")
+def change_password(
+    body: ChangePasswordRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not verify_password(body.current_password, user.password_hash):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    user.password_hash = hash_password(body.new_password)
+    user.force_password_change = False
+    log_audit(db, user.id, "user.password_changed", "user", user.id)
+    db.commit()
+    return {"ok": True}
 
 
 @router.post("/forgot-password")
@@ -271,7 +223,7 @@ def forgot_password(
 
         frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:5173")
         try:
-            _send_reset_email(user.email, raw_token, frontend_url)
+            send_reset_email(user.email, raw_token, frontend_url, PASSWORD_RESET_MINUTES)
         except Exception:
             pass  # Email failure must not expose token or break the flow
 
@@ -303,6 +255,7 @@ def reset_password(
         raise HTTPException(status_code=400, detail="Invalid or expired reset token")
 
     user.password_hash = hash_password(new_password)
+    user.force_password_change = False
     prt.used = True
     db.query(RefreshToken).filter_by(user_id=user.id, revoked=False).update({"revoked": True})
     log_audit(db, user.id, "user.password_reset", "user", user.id, ip_address=_client_ip(request))

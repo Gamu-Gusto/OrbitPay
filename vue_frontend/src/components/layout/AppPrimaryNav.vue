@@ -15,196 +15,210 @@
 
     <!-- Navigation -->
     <nav class="sidebar-nav">
-      <span class="nav-section-label">Main Menu</span>
 
-      <router-link to="/" class="nav-link" :class="{ 'is-active': isDashboard }" @click="$emit('close')" data-label="Dashboard">
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-          <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
-          <rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>
-        </svg>
-        <span>Dashboard</span>
-      </router-link>
+      <!-- ── Employee-only nav ────────────────────────────────────────────── -->
+      <template v-if="isEmployeeOnly">
+        <span class="nav-section-label">My Workspace</span>
 
-      <router-link to="/payroll" class="nav-link" :class="{ 'is-active': isPayroll }" @click="$emit('close')" data-label="Payroll">
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-          <rect x="2" y="3" width="8" height="10" rx="1"/><rect x="14" y="3" width="8" height="6" rx="1"/>
-          <rect x="14" y="13" width="8" height="8" rx="1"/><rect x="2" y="17" width="8" height="4" rx="1"/>
-        </svg>
-        <span>Payroll</span>
-      </router-link>
+        <router-link to="/portal" class="nav-link" :class="{ 'is-active': isPortal }" @click="$emit('close')" data-label="Dashboard">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+            <rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>
+          </svg>
+          <span>Dashboard</span>
+        </router-link>
 
-      <router-link
-        v-if="auth.hasPermission('RUN_PAYROLL')"
-        to="/payroll/bulk"
-        class="nav-link"
-        :class="{ 'is-active': isBulk }"
-        @click="$emit('close')"
-      >
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-          <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
-          <circle cx="9" cy="7" r="4"/>
-          <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/>
-        </svg>
-        <span>Bulk Payroll</span>
-      </router-link>
+        <router-link to="/leave" class="nav-link" :class="{ 'is-active': isLeave }" @click="$emit('close')" data-label="My Leave">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/>
+            <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+            <path d="M8 14l2 2 4-4"/>
+          </svg>
+          <span>My Leave</span>
+        </router-link>
+      </template>
 
-      <router-link to="/companies" class="nav-link" :class="{ 'is-active': isCompanies }" @click="$emit('close')" data-label="Companies">
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-          <path d="M3 21h18M3 7l9-4 9 4M4 7v14M20 7v14M9 21v-4a3 3 0 016 0v4"/>
-        </svg>
-        <span>Companies</span>
-      </router-link>
+      <!-- ── Admin / accountant nav ─────────────────────────────────────── -->
+      <template v-else>
+        <span class="nav-section-label">Main Menu</span>
 
-      <router-link
-        v-if="auth.hasPermission('VIEW_HR_REPORTS')"
-        to="/hr-reports"
-        class="nav-link"
-        :class="{ 'is-active': isHR }"
-        @click="$emit('close')"
-      >
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-          <path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6m4 0h14M13 19v-10a2 2 0 00-2-2H9"/>
-          <path d="M17 19V9a2 2 0 00-2-2h-2"/>
-        </svg>
-        <span>HR Reports</span>
-      </router-link>
+        <router-link to="/" class="nav-link" :class="{ 'is-active': isDashboard }" @click="$emit('close')" data-label="Dashboard">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+            <rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>
+          </svg>
+          <span>Dashboard</span>
+        </router-link>
 
-      <router-link
-        v-if="auth.hasPermission('MANAGE_ASSIGNMENTS')"
-        to="/admin/assignments"
-        class="nav-link"
-        :class="{ 'is-active': isAdmin }"
-        @click="$emit('close')"
-      >
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-          <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
-          <path d="M18 14l2 2 4-4" stroke-linecap="round"/>
-        </svg>
-        <span>Admin</span>
-      </router-link>
+        <router-link to="/payroll" class="nav-link" :class="{ 'is-active': isPayroll }" @click="$emit('close')" data-label="Payroll">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <rect x="2" y="3" width="8" height="10" rx="1"/><rect x="14" y="3" width="8" height="6" rx="1"/>
+            <rect x="14" y="13" width="8" height="8" rx="1"/><rect x="2" y="17" width="8" height="4" rx="1"/>
+          </svg>
+          <span>Payroll</span>
+        </router-link>
 
-      <span v-if="auth.hasPermission('APPROVE_LEAVE')" class="nav-section-label" style="margin-top:8px">Approvals</span>
+        <router-link
+          v-if="auth.hasPermission('RUN_PAYROLL')"
+          to="/payroll/bulk"
+          class="nav-link"
+          :class="{ 'is-active': isBulk }"
+          @click="$emit('close')"
+        >
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/>
+          </svg>
+          <span>Bulk Payroll</span>
+        </router-link>
 
-      <router-link
-        v-if="auth.hasPermission('APPROVE_LEAVE')"
-        to="/approvals/leave"
-        class="nav-link"
-        :class="{ 'is-active': isLeaveApprovals }"
-        @click="$emit('close')"
-        data-label="Leave Approvals"
-      >
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-          <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/>
-          <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
-          <path d="M9 16l2 2 4-4"/>
-        </svg>
-        <span>Leave Approvals</span>
-        <span v-if="pendingCounts.leave > 0" class="nav-badge">{{ pendingCounts.leave }}</span>
-      </router-link>
+        <router-link to="/companies" class="nav-link" :class="{ 'is-active': isCompanies }" @click="$emit('close')" data-label="Companies">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M3 21h18M3 7l9-4 9 4M4 7v14M20 7v14M9 21v-4a3 3 0 016 0v4"/>
+          </svg>
+          <span>Companies</span>
+        </router-link>
 
-      <router-link
-        v-if="auth.hasPermission('REVIEW_DOCUMENTS')"
-        to="/approvals/documents"
-        class="nav-link"
-        :class="{ 'is-active': isDocApprovals }"
-        @click="$emit('close')"
-        data-label="Document Approvals"
-      >
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-          <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
-          <polyline points="14 2 14 8 20 8"/>
-          <path d="M9 15l2 2 4-4"/>
-        </svg>
-        <span>Doc Approvals</span>
-        <span v-if="pendingCounts.documents > 0" class="nav-badge">{{ pendingCounts.documents }}</span>
-      </router-link>
+        <router-link
+          v-if="auth.hasPermission('VIEW_HR_REPORTS')"
+          to="/hr-reports"
+          class="nav-link"
+          :class="{ 'is-active': isHR }"
+          @click="$emit('close')"
+        >
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6m4 0h14M13 19v-10a2 2 0 00-2-2H9"/>
+            <path d="M17 19V9a2 2 0 00-2-2h-2"/>
+          </svg>
+          <span>HR Reports</span>
+        </router-link>
 
-      <router-link
-        v-if="auth.hasPermission('APPROVE_BANKING')"
-        to="/approvals/banking"
-        class="nav-link"
-        :class="{ 'is-active': isBankApprovals }"
-        @click="$emit('close')"
-        data-label="Banking Approvals"
-      >
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-          <path d="M3 21h18M3 10h18M5 21V10M19 21V10M12 6l9 4H3l9-4z"/>
-        </svg>
-        <span>Banking Approvals</span>
-        <span v-if="pendingCounts.banking > 0" class="nav-badge">{{ pendingCounts.banking }}</span>
-      </router-link>
+        <router-link
+          v-if="auth.hasPermission('MANAGE_ASSIGNMENTS')"
+          to="/admin/assignments"
+          class="nav-link"
+          :class="{ 'is-active': isAdmin }"
+          @click="$emit('close')"
+        >
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+            <path d="M18 14l2 2 4-4" stroke-linecap="round"/>
+          </svg>
+          <span>Admin</span>
+        </router-link>
 
-      <router-link
-        v-if="auth.hasPermission('VIEW_AUDIT_LOGS')"
-        to="/audit"
-        class="nav-link"
-        :class="{ 'is-active': isAudit }"
-        @click="$emit('close')"
-      >
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-          <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
-          <polyline points="14 2 14 8 20 8"/>
-          <line x1="16" y1="13" x2="8" y2="13"/>
-          <line x1="16" y1="17" x2="8" y2="17"/>
-          <polyline points="10 9 9 9 8 9"/>
-        </svg>
-        <span>Audit Log</span>
-      </router-link>
+        <span v-if="auth.hasPermission('APPROVE_LEAVE')" class="nav-section-label" style="margin-top:8px">Approvals</span>
 
-      <router-link
-        v-if="auth.hasPermission('VIEW_PAYROLL_REPORTS')"
-        to="/reports"
-        class="nav-link"
-        :class="{ 'is-active': isReports }"
-        @click="$emit('close')"
-      >
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-          <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/>
-          <line x1="6" y1="20" x2="6" y2="14"/>
-        </svg>
-        <span>Reports</span>
-      </router-link>
+        <router-link
+          v-if="auth.hasPermission('APPROVE_LEAVE')"
+          to="/approvals/leave"
+          class="nav-link"
+          :class="{ 'is-active': isLeaveApprovals }"
+          @click="$emit('close')"
+          data-label="Leave Approvals"
+        >
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/>
+            <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+            <path d="M9 16l2 2 4-4"/>
+          </svg>
+          <span>Leave Approvals</span>
+          <span v-if="pendingCounts.leave > 0" class="nav-badge">{{ pendingCounts.leave }}</span>
+        </router-link>
 
-      <router-link
-        v-if="auth.hasPermission('VIEW_OWN_PAYSLIPS')"
-        to="/portal"
-        class="nav-link"
-        :class="{ 'is-active': isPortal }"
-        @click="$emit('close')"
-      >
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-          <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
-        </svg>
-        <span>My Portal</span>
-      </router-link>
+        <router-link
+          v-if="auth.hasPermission('REVIEW_DOCUMENTS')"
+          to="/approvals/documents"
+          class="nav-link"
+          :class="{ 'is-active': isDocApprovals }"
+          @click="$emit('close')"
+          data-label="Document Approvals"
+        >
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <path d="M9 15l2 2 4-4"/>
+          </svg>
+          <span>Doc Approvals</span>
+          <span v-if="pendingCounts.documents > 0" class="nav-badge">{{ pendingCounts.documents }}</span>
+        </router-link>
 
-      <router-link
-        to="/leave"
-        class="nav-link"
-        :class="{ 'is-active': isLeave }"
-        @click="$emit('close')"
-      >
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-          <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/>
-          <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
-          <path d="M8 14l2 2 4-4"/>
-        </svg>
-        <span>Leave</span>
-      </router-link>
+        <router-link
+          v-if="auth.hasPermission('APPROVE_BANKING')"
+          to="/approvals/banking"
+          class="nav-link"
+          :class="{ 'is-active': isBankApprovals }"
+          @click="$emit('close')"
+          data-label="Banking Approvals"
+        >
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M3 21h18M3 10h18M5 21V10M19 21V10M12 6l9 4H3l9-4z"/>
+          </svg>
+          <span>Banking Approvals</span>
+          <span v-if="pendingCounts.banking > 0" class="nav-badge">{{ pendingCounts.banking }}</span>
+        </router-link>
 
-      <router-link
-        v-if="auth.hasPermission('VIEW_PAYROLL_REPORTS')"
-        to="/compliance"
-        class="nav-link"
-        :class="{ 'is-active': isCompliance }"
-        @click="$emit('close')"
-      >
-        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-          <path d="M12 2L3 7v6c0 5.25 3.75 10.15 9 11.35C17.25 23.15 21 18.25 21 13V7L12 2z"/>
-          <polyline points="9 12 11 14 15 10"/>
-        </svg>
-        <span>Compliance</span>
-      </router-link>
+        <router-link
+          v-if="auth.hasPermission('VIEW_AUDIT_LOGS')"
+          to="/audit"
+          class="nav-link"
+          :class="{ 'is-active': isAudit }"
+          @click="$emit('close')"
+        >
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+            <polyline points="10 9 9 9 8 9"/>
+          </svg>
+          <span>Audit Log</span>
+        </router-link>
+
+        <router-link
+          v-if="auth.hasPermission('VIEW_PAYROLL_REPORTS')"
+          to="/reports"
+          class="nav-link"
+          :class="{ 'is-active': isReports }"
+          @click="$emit('close')"
+        >
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/>
+            <line x1="6" y1="20" x2="6" y2="14"/>
+          </svg>
+          <span>Reports</span>
+        </router-link>
+
+        <router-link
+          to="/leave"
+          class="nav-link"
+          :class="{ 'is-active': isLeave }"
+          @click="$emit('close')"
+        >
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/>
+            <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+            <path d="M8 14l2 2 4-4"/>
+          </svg>
+          <span>Leave</span>
+        </router-link>
+
+        <router-link
+          v-if="auth.hasPermission('VIEW_PAYROLL_REPORTS')"
+          to="/compliance"
+          class="nav-link"
+          :class="{ 'is-active': isCompliance }"
+          @click="$emit('close')"
+        >
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M12 2L3 7v6c0 5.25 3.75 10.15 9 11.35C17.25 23.15 21 18.25 21 13V7L12 2z"/>
+            <polyline points="9 12 11 14 15 10"/>
+          </svg>
+          <span>Compliance</span>
+        </router-link>
+      </template>
+
     </nav>
 
     <!-- Collapse toggle -->
@@ -220,7 +234,7 @@
       <div class="user-avatar">{{ initials }}</div>
       <div class="user-details">
         <span class="user-name">{{ fullName }}</span>
-        <span class="user-role">{{ formattedRole }}</span>
+        <router-link to="/change-password" class="user-role user-role-link" @click="$emit('close')" title="Change password">{{ formattedRole }}</router-link>
       </div>
       <button class="logout-btn" @click="logout" title="Sign out">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -248,6 +262,10 @@ export default {
   setup() {
     const route = useRoute()
     const auth  = useAuthStore()
+
+    const isEmployeeOnly = computed(() =>
+      auth.roles.includes('employee') && !auth.roles.some(r => ['super_admin', 'accountant'].includes(r))
+    )
 
     const isDashboard    = computed(() => route.path === '/')
     const isPayroll      = computed(() => route.path === '/payroll')
@@ -303,7 +321,7 @@ export default {
 
     const logout = () => { auth.logout() }
 
-    return { auth, isDashboard, isPayroll, isBulk, isCompanies, isHR, isAdmin, isAudit, isReports, isPortal, isLeave, isCompliance, isLeaveApprovals, isDocApprovals, isBankApprovals, pendingCounts, initials, fullName, formattedRole, logout }
+    return { auth, isEmployeeOnly, isDashboard, isPayroll, isBulk, isCompanies, isHR, isAdmin, isAudit, isReports, isPortal, isLeave, isCompliance, isLeaveApprovals, isDocApprovals, isBankApprovals, pendingCounts, initials, fullName, formattedRole, logout }
   }
 }
 </script>
@@ -551,6 +569,12 @@ export default {
   text-overflow: ellipsis;
   line-height: 1.3;
 }
+
+.user-role-link {
+  text-decoration: none;
+  cursor: pointer;
+}
+.user-role-link:hover { color: rgba(255,255,255,0.7); text-decoration: underline; }
 
 .logout-btn {
   width: 28px;

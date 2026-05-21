@@ -312,6 +312,44 @@
             </div>
           </div>
 
+          <!-- ── Login Credentials tab (create only) ── -->
+          <div v-if="activeTab === 'credentials'" class="tab-content fade-in">
+            <div class="info-box info-blue" style="margin-bottom:16px">
+              Optionally create a login account for this employee. They will receive a welcome email with a temporary password and be prompted to change it on first login. Leave blank to skip.
+            </div>
+            <div class="form-grid">
+              <div class="form-group span-2">
+                <label class="form-label">Login Email</label>
+                <input v-model="creds.login_email" type="email" class="form-input" placeholder="employee@example.com" autocomplete="off" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Temporary Password</label>
+                <div class="pw-field-wrap">
+                  <input
+                    v-model="creds.login_password"
+                    :type="creds.showPassword ? 'text' : 'password'"
+                    class="form-input"
+                    placeholder="Min 8 characters"
+                    autocomplete="new-password"
+                  />
+                  <button type="button" class="pw-toggle" @click="creds.showPassword = !creds.showPassword">
+                    {{ creds.showPassword ? 'Hide' : 'Show' }}
+                  </button>
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Confirm Password</label>
+                <input
+                  v-model="creds.login_password_confirm"
+                  :type="creds.showPassword ? 'text' : 'password'"
+                  class="form-input"
+                  placeholder="Repeat password"
+                  autocomplete="new-password"
+                />
+              </div>
+            </div>
+          </div>
+
         </div>
 
         <!-- Drawer footer -->
@@ -455,11 +493,12 @@ import { useAuthStore } from '../stores/auth'
 import { useToastStore } from '../stores/toast'
 import { useRoute } from 'vue-router'
 
-const TABS = [
-  { id: 'personal', label: 'Personal Info' },
-  { id: 'banking',  label: 'Banking' },
-  { id: 'salary',   label: 'Salary & Deductions' },
-  { id: 'tax',      label: 'Tax Info' },
+const ALL_TABS = [
+  { id: 'personal',     label: 'Personal Info' },
+  { id: 'banking',      label: 'Banking' },
+  { id: 'salary',       label: 'Salary & Deductions' },
+  { id: 'tax',          label: 'Tax Info' },
+  { id: 'credentials',  label: 'Login Credentials', createOnly: true },
 ]
 
 export default {
@@ -479,6 +518,8 @@ export default {
     const saving      = ref(false)
     const calculating = ref(false)
 
+    const TABS = computed(() => ALL_TABS.filter(t => !t.createOnly || !editing.value))
+
     const form = reactive({
       first_names: '', last_name: '', employee_no: '', id_no: '', position: '',
       tax_ref: '', emp_date: '', is_active: true,
@@ -487,6 +528,8 @@ export default {
       pension_contribution: 0, medical_aid: 0, union_fees: 0, other_deductions: 0,
       bank_name: '', account_number: '', branch_code: '', account_type: ''
     })
+
+    const creds = reactive({ login_email: '', login_password: '', login_password_confirm: '', showPassword: false })
 
     const calcMode     = ref('normal')
     const reverseToggle = ref(false)
@@ -515,6 +558,7 @@ export default {
         pension_contribution:0, medical_aid:0, union_fees:0, other_deductions:0,
         bank_name:'', account_number:'', branch_code:'', account_type:''
       })
+      Object.assign(creds, { login_email: '', login_password: '', login_password_confirm: '', showPassword: false })
       calcMode.value = 'normal'
       reverseToggle.value = false
       targetNetPay.value = 0
@@ -604,15 +648,41 @@ export default {
         activeTab.value = 'personal'
         return
       }
+      // Validate credentials if provided (create-only)
+      if (!editing.value && creds.login_email) {
+        if (!creds.login_password) {
+          toast.error('Password is required when an email is provided')
+          activeTab.value = 'credentials'
+          return
+        }
+        if (creds.login_password.length < 8) {
+          toast.error('Password must be at least 8 characters')
+          activeTab.value = 'credentials'
+          return
+        }
+        if (creds.login_password !== creds.login_password_confirm) {
+          toast.error('Passwords do not match')
+          activeTab.value = 'credentials'
+          return
+        }
+      }
       saving.value = true
       try {
         await previewSalary()
         if (editing.value) {
           await axios.put(`/employees/${editing.value.id}`, form, authHeader())
         } else {
-          await axios.post(`/companies/${companyId}/employees`, form, authHeader())
+          const payload = { ...form }
+          if (creds.login_email && creds.login_password) {
+            payload.login_email = creds.login_email
+            payload.login_password = creds.login_password
+          }
+          await axios.post(`/companies/${companyId}/employees`, payload, authHeader())
         }
-        toast.success(editing.value ? 'Employee updated successfully' : 'Employee created successfully')
+        const successMsg = (!editing.value && creds.login_email)
+          ? `Employee created and credentials sent to ${creds.login_email}`
+          : (editing.value ? 'Employee updated successfully' : 'Employee created successfully')
+        toast.success(successMsg)
         showDrawer.value = false
         await load()
       } catch (err) {
@@ -757,7 +827,7 @@ export default {
 
     return {
       TABS, companyId, employees, companyName,
-      showDrawer, editing, form, activeTab, saving, calculating,
+      showDrawer, editing, form, creds, activeTab, saving, calculating,
       openCreate, openEdit, close, save, remove,
       previewSalary, previewResult, totalDeductions,
       calcMode, reverseToggle, targetNetPay, sdl, leave,
@@ -933,6 +1003,25 @@ export default {
 
 /* ── Tab content ─────────────────────────────────────────────────────────── */
 .tab-content { min-height: 0; }
+
+/* ── Password field with show/hide ──────────────────────────────────────── */
+.pw-field-wrap { position: relative; display: flex; }
+.pw-field-wrap .form-input { padding-right: 52px; flex: 1; }
+.pw-toggle {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-accent);
+  cursor: pointer;
+  padding: 0;
+  font-family: inherit;
+}
+.pw-toggle:hover { text-decoration: underline; }
 
 /* ── Required asterisk ───────────────────────────────────────────────────── */
 .req { color: var(--color-error); margin-left: 2px; }
