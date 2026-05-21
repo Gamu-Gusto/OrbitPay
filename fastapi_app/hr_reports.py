@@ -4,35 +4,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from orm_models import Employee, User, PayrollRecord
 from db import get_db
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from auth import decode_token
 from utils import monthly_paye_from_gross, uif_employee, calculate_sdl
+from core.guards import get_current_user, require_permission
 
 router = APIRouter()
-security = HTTPBearer()
-
-# Local authentication functions to avoid circular imports
-def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
-    try:
-        payload = decode_token(credentials.credentials)
-        user_id = int(payload.get("sub"))
-        roles = payload.get("roles", [])
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid token")
-
-    user = db.get(User, user_id)
-    if not user or not user.is_active:
-        raise HTTPException(status_code=401, detail="Inactive user")
-
-    user.role_names = roles
-    return user
-
-def require_roles(*allowed: str):
-    def dep(user: User = Depends(get_current_user)):
-        if not any(r in allowed for r in getattr(user, "role_names", [])):
-            raise HTTPException(status_code=403, detail="Forbidden")
-        return user
-    return dep
 
 class HRReportsResponse(BaseModel):
     headcount: dict
@@ -65,7 +40,7 @@ class EmployeeSalaryInfo(BaseModel):
 def get_hr_reports(
     company_id: int = None,
     db: Session = Depends(get_db), 
-    user: User = Depends(require_roles("super_admin", "client_admin", "accountant"))
+    user: User = Depends(require_permission("VIEW_HR_REPORTS"))
 ):
     """Get basic HR reports including employee headcount, turnover, leave stats, and payroll summary"""
     try:
@@ -239,7 +214,7 @@ def get_detailed_hr_reports(
     company_id: int = None,
     period: str = "monthly",
     db: Session = Depends(get_db), 
-    user: User = Depends(require_roles("super_admin", "client_admin", "accountant"))
+    user: User = Depends(require_permission("VIEW_HR_REPORTS"))
 ):
     """Get detailed HR reports filtered by period"""
     try:

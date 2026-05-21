@@ -112,9 +112,13 @@
                   <td>{{ fmtDate(r.start_date) }}</td>
                   <td>{{ fmtDate(r.end_date) }}</td>
                   <td class="num">{{ r.days_requested }}</td>
-                  <td><span class="badge" :class="statusBadge(r.status)">{{ r.status }}</span></td>
+                  <td><span class="badge" :class="statusBadge(r.status)">{{ statusLabel(r.status) }}</span></td>
                   <td>
-                    <span v-if="r.status === 'rejected' && r.review_note" class="rejection-reason">{{ r.review_note }}</span>
+                    <span v-if="r.status === 'request_documentation' && r.documentation_requested_reason" class="docs-requested-note">
+                      📋 {{ r.documentation_requested_reason }}
+                      <button @click="resubmit(r)" :disabled="r._resubmitting" class="btn-link-inline">Re-submit</button>
+                    </span>
+                    <span v-else-if="r.status === 'rejected' && r.review_note" class="rejection-reason">{{ r.review_note }}</span>
                     <span v-else class="muted-text">—</span>
                   </td>
                 </tr>
@@ -141,6 +145,8 @@
           <select v-model="mgr.statusFilter" @change="fetchManagerRequests" class="form-input filter-select">
             <option value="">All Statuses</option>
             <option value="pending">Pending</option>
+            <option value="under_review">Under Review</option>
+            <option value="request_documentation">Docs Requested</option>
             <option value="approved">Approved</option>
             <option value="rejected">Rejected</option>
           </select>
@@ -175,10 +181,11 @@
                   <td>{{ fmtDate(r.end_date) }}</td>
                   <td class="num">{{ r.days_requested }}</td>
                   <td class="muted-text reason-cell">{{ r.reason || '—' }}</td>
-                  <td><span class="badge" :class="statusBadge(r.status)">{{ r.status }}</span></td>
+                  <td><span class="badge" :class="statusBadge(r.status)">{{ statusLabel(r.status) }}</span></td>
                   <td>
-                    <template v-if="r.status === 'pending'">
+                    <template v-if="['pending','under_review'].includes(r.status)">
                       <div class="action-cell">
+                        <button v-if="r.status === 'pending'" @click="markUnderReview(r)" :disabled="r._acting" class="btn-light btn-sm">Review</button>
                         <button @click="approve(r)" :disabled="r._acting" class="btn-primary btn-sm">Approve</button>
                         <button @click="startReject(r)" :disabled="r._acting" class="btn-light btn-sm">Reject</button>
                       </div>
@@ -188,6 +195,7 @@
                         <button @click="r._rejecting = false" class="btn-light btn-sm">Cancel</button>
                       </div>
                     </template>
+                    <span v-else-if="r.status === 'request_documentation'" class="muted-text" style="font-size:11px">Awaiting docs</span>
                     <span v-else class="muted-text">—</span>
                   </td>
                 </tr>
@@ -242,7 +250,7 @@ export default {
       try {
         const { data } = await axios.get('/me/leave')
         leaveBalances.value = data.balances || []
-        myRequests.value = data.requests || []
+        myRequests.value = (data.requests || []).map(r => ({ ...r, _resubmitting: false }))
       } catch {}
       loadingEmployee.value = false
     }
@@ -309,14 +317,20 @@ export default {
       loadingManager.value = false
     }
 
+    const markUnderReview = async (r) => {
+      r._acting = true
+      try {
+        await axios.put(`/leave/requests/${r.id}/review`, { status: 'under_review' })
+        await fetchManagerRequests()
+      } catch { r._acting = false }
+    }
+
     const approve = async (r) => {
       r._acting = true
       try {
-        await axios.put(`/leave/requests/${r.id}/review`, { approved: true })
+        await axios.put(`/leave/requests/${r.id}/review`, { status: 'approved' })
         await fetchManagerRequests()
-      } catch {
-        r._acting = false
-      }
+      } catch { r._acting = false }
     }
 
     const startReject = (r) => {
@@ -328,12 +342,17 @@ export default {
     const confirmReject = async (r) => {
       r._acting = true
       try {
-        await axios.put(`/leave/requests/${r.id}/review`, { approved: false, note: r._rejectNote })
+        await axios.put(`/leave/requests/${r.id}/review`, { status: 'rejected', note: r._rejectNote })
         await fetchManagerRequests()
-      } catch {
-        r._acting = false
-        r._rejecting = false
-      }
+      } catch { r._acting = false; r._rejecting = false }
+    }
+
+    const resubmit = async (r) => {
+      r._resubmitting = true
+      try {
+        await axios.post(`/leave/requests/${r.id}/submit-documents`)
+        await fetchEmployeeLeave()
+      } catch { r._resubmitting = false }
     }
 
     // ── Helpers ─────────────────────────────────────────
@@ -343,8 +362,25 @@ export default {
       catch { return s }
     }
 
+    const statusLabel = (s) => {
+      const map = {
+        pending: 'Pending',
+        under_review: 'Under Review',
+        request_documentation: 'Docs Requested',
+        approved: 'Approved',
+        rejected: 'Rejected',
+      }
+      return map[(s || '').toLowerCase()] || s
+    }
+
     const statusBadge = (s) => {
-      const map = { approved: 'badge-green', rejected: 'badge-red', pending: 'badge-yellow', cancelled: 'badge-gray' }
+      const map = {
+        approved: 'badge-green',
+        rejected: 'badge-red',
+        pending: 'badge-yellow',
+        under_review: 'badge-blue',
+        request_documentation: 'badge-orange',
+      }
       return map[(s || '').toLowerCase()] || 'badge-gray'
     }
 
@@ -357,11 +393,11 @@ export default {
       isEmployee, isManager,
       loadingEmployee, leaveBalances, myRequests,
       reqForm, submitting, submitError, submitSuccess, computedDays,
-      submitLeaveRequest,
+      submitLeaveRequest, resubmit,
       companies, loadingManager, managerRequests, mgr,
       onCompanySelect, fetchManagerRequests,
-      approve, startReject, confirmReject,
-      fmtDate, statusBadge
+      markUnderReview, approve, startReject, confirmReject,
+      fmtDate, statusLabel, statusBadge
     }
   }
 }
@@ -513,11 +549,16 @@ export default {
   white-space: nowrap;
 }
 
-.badge-green { background: #dcfce7; color: #15803d; }
-.badge-red { background: #fee2e2; color: #b91c1c; }
+.badge-green  { background: #dcfce7; color: #15803d; }
+.badge-red    { background: #fee2e2; color: #b91c1c; }
 .badge-yellow { background: #fef9c3; color: #854d0e; }
-.badge-blue { background: #dbeafe; color: #1d4ed8; }
-.badge-gray { background: var(--color-bg-page); color: var(--color-text-muted); }
+.badge-blue   { background: #dbeafe; color: #1d4ed8; }
+.badge-orange { background: #ffedd5; color: #92400e; }
+.badge-gray   { background: var(--color-bg-page); color: var(--color-text-muted); }
+
+.docs-requested-note { font-size: 11px; color: #92400e; font-style: italic; display: flex; flex-direction: column; gap: 4px; }
+.btn-link-inline { background: none; border: none; color: #1d4ed8; font-size: 11px; cursor: pointer; padding: 0; text-decoration: underline; }
+.btn-link-inline:hover { color: #1e40af; }
 
 .text-green { color: #15803d; font-weight: 600; }
 .text-red { color: #dc2626; font-weight: 600; }

@@ -34,7 +34,7 @@
       </router-link>
 
       <router-link
-        v-if="hasRole(['super_admin','accountant'])"
+        v-if="auth.hasPermission('RUN_PAYROLL')"
         to="/payroll/bulk"
         class="nav-link"
         :class="{ 'is-active': isBulk }"
@@ -56,7 +56,7 @@
       </router-link>
 
       <router-link
-        v-if="hasRole(['super_admin','accountant'])"
+        v-if="auth.hasPermission('VIEW_HR_REPORTS')"
         to="/hr-reports"
         class="nav-link"
         :class="{ 'is-active': isHR }"
@@ -70,7 +70,7 @@
       </router-link>
 
       <router-link
-        v-if="hasRole(['super_admin'])"
+        v-if="auth.hasPermission('MANAGE_ASSIGNMENTS')"
         to="/admin/assignments"
         class="nav-link"
         :class="{ 'is-active': isAdmin }"
@@ -83,10 +83,10 @@
         <span>Admin</span>
       </router-link>
 
-      <span v-if="hasRole(['super_admin'])" class="nav-section-label" style="margin-top:8px">Approvals</span>
+      <span v-if="auth.hasPermission('APPROVE_LEAVE')" class="nav-section-label" style="margin-top:8px">Approvals</span>
 
       <router-link
-        v-if="hasRole(['super_admin'])"
+        v-if="auth.hasPermission('APPROVE_LEAVE')"
         to="/approvals/leave"
         class="nav-link"
         :class="{ 'is-active': isLeaveApprovals }"
@@ -103,7 +103,7 @@
       </router-link>
 
       <router-link
-        v-if="hasRole(['super_admin'])"
+        v-if="auth.hasPermission('REVIEW_DOCUMENTS')"
         to="/approvals/documents"
         class="nav-link"
         :class="{ 'is-active': isDocApprovals }"
@@ -120,7 +120,7 @@
       </router-link>
 
       <router-link
-        v-if="hasRole(['super_admin'])"
+        v-if="auth.hasPermission('APPROVE_BANKING')"
         to="/approvals/banking"
         class="nav-link"
         :class="{ 'is-active': isBankApprovals }"
@@ -135,7 +135,7 @@
       </router-link>
 
       <router-link
-        v-if="hasRole(['super_admin','accountant','client_admin'])"
+        v-if="auth.hasPermission('VIEW_AUDIT_LOGS')"
         to="/audit"
         class="nav-link"
         :class="{ 'is-active': isAudit }"
@@ -152,7 +152,7 @@
       </router-link>
 
       <router-link
-        v-if="hasRole(['super_admin','accountant','client_admin'])"
+        v-if="auth.hasPermission('VIEW_PAYROLL_REPORTS')"
         to="/reports"
         class="nav-link"
         :class="{ 'is-active': isReports }"
@@ -166,7 +166,7 @@
       </router-link>
 
       <router-link
-        v-if="hasRole(['employee'])"
+        v-if="auth.hasPermission('VIEW_OWN_PAYSLIPS')"
         to="/portal"
         class="nav-link"
         :class="{ 'is-active': isPortal }"
@@ -193,7 +193,7 @@
       </router-link>
 
       <router-link
-        v-if="hasRole(['super_admin','accountant','client_admin'])"
+        v-if="auth.hasPermission('VIEW_PAYROLL_REPORTS')"
         to="/compliance"
         class="nav-link"
         :class="{ 'is-active': isCompliance }"
@@ -249,8 +249,6 @@ export default {
     const route = useRoute()
     const auth  = useAuthStore()
 
-    const hasRole = (roles) => auth.roles?.some(r => roles.includes(r))
-
     const isDashboard    = computed(() => route.path === '/')
     const isPayroll      = computed(() => route.path === '/payroll')
     const isBulk         = computed(() => route.path === '/payroll/bulk')
@@ -269,7 +267,7 @@ export default {
     const pendingCounts = reactive({ leave: 0, documents: 0, banking: 0 })
 
     const fetchPendingCounts = async () => {
-      if (!hasRole(['super_admin'])) return
+      if (!auth.hasPermission('APPROVE_LEAVE')) return
       try {
         const { data } = await axios.get('/dashboard/stats')
         pendingCounts.leave     = data.pending_leave     || 0
@@ -308,7 +306,7 @@ export default {
       window.location.href = '/login'
     }
 
-    return { hasRole, isDashboard, isPayroll, isBulk, isCompanies, isHR, isAdmin, isAudit, isReports, isPortal, isLeave, isCompliance, isLeaveApprovals, isDocApprovals, isBankApprovals, pendingCounts, initials, fullName, formattedRole, logout }
+    return { auth, isDashboard, isPayroll, isBulk, isCompanies, isHR, isAdmin, isAudit, isReports, isPortal, isLeave, isCompliance, isLeaveApprovals, isDocApprovals, isBankApprovals, pendingCounts, initials, fullName, formattedRole, logout }
   }
 }
 </script>

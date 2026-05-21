@@ -262,8 +262,12 @@ class LeaveRequestCreate(BaseModel):
 
 
 class LeaveRequestReview(BaseModel):
-    approved: bool
+    status: str  # "approved", "rejected", "under_review"
     note: Optional[str] = None
+
+
+class LeaveDocumentRequest(BaseModel):
+    reason: str
 
 
 # ------------------ Assignments ------------------

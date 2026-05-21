@@ -18,7 +18,37 @@ export const useAuthStore = defineStore('auth', {
   },
   getters: {
     isAuthenticated: (state) => !!state.accessToken,
-    roles: (state) => state.user?.roles || []
+    roles: (state) => state.user?.roles || [],
+    hasPermission: (state) => (permission) => {
+      const ROLE_PERMISSIONS = {
+        super_admin: [
+          'MANAGE_COMPANIES', 'DELETE_COMPANY', 'VIEW_COMPANIES',
+          'CREATE_EMPLOYEE', 'EDIT_EMPLOYEE', 'DELETE_EMPLOYEE', 'VIEW_EMPLOYEES', 'IMPORT_EMPLOYEES',
+          'RUN_PAYROLL', 'APPROVE_PAYROLL', 'VIEW_PAYROLL', 'VIEW_PAYROLL_REPORTS', 'VIEW_HR_REPORTS',
+          'APPROVE_LEAVE', 'VIEW_LEAVE_REQUESTS', 'REQUEST_DOCUMENTATION', 'MANAGE_LEAVE_BALANCES',
+          'REVIEW_DOCUMENTS', 'APPROVE_DOCUMENTS', 'VIEW_DOCUMENTS',
+          'APPROVE_BANKING', 'VIEW_BANKING',
+          'ASSIGN_ACCOUNTANTS', 'MANAGE_ASSIGNMENTS',
+          'VIEW_AUDIT_LOGS', 'VIEW_ALL_REPORTS',
+          'CREATE_USER', 'DEACTIVATE_USER',
+        ],
+        accountant: [
+          'MANAGE_COMPANIES', 'VIEW_COMPANIES',
+          'CREATE_EMPLOYEE', 'EDIT_EMPLOYEE', 'DELETE_EMPLOYEE', 'VIEW_EMPLOYEES', 'IMPORT_EMPLOYEES',
+          'RUN_PAYROLL', 'VIEW_PAYROLL', 'VIEW_PAYROLL_REPORTS',
+          'VIEW_LEAVE_REQUESTS', 'MANAGE_LEAVE_BALANCES',
+          'VIEW_DOCUMENTS', 'VIEW_BANKING',
+          'VIEW_HR_REPORTS', 'VIEW_AUDIT_LOGS',
+        ],
+        employee: [
+          'VIEW_OWN_PAYSLIPS', 'VIEW_OWN_LEAVE', 'APPLY_LEAVE',
+          'UPLOAD_DOCUMENTS', 'SUBMIT_BANKING_CHANGE',
+          'UPDATE_PASSWORD', 'VIEW_OWN_PAYROLL_HISTORY', 'VIEW_EMPLOYEES',
+        ],
+      }
+      const userRoles = state.user?.roles || []
+      return userRoles.some(role => (ROLE_PERMISSIONS[role] || []).includes(permission))
+    }
   },
   actions: {
     async initializeAuth() {

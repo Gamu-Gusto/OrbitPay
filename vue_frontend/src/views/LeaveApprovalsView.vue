@@ -11,7 +11,7 @@
       </button>
     </div>
 
-    <div v-if="loading" class="loading-state"><div class="spinner"></div><span>Loading pending requests…</span></div>
+    <div v-if="loading" class="loading-state"><div class="spinner"></div><span>Loading requests…</span></div>
 
     <div v-else-if="requests.length === 0" class="card empty-state">All leave requests have been reviewed.</div>
 
@@ -26,7 +26,8 @@
               <th>From</th>
               <th>To</th>
               <th class="num">Days</th>
-              <th>Reason</th>
+              <th>Reason / Notes</th>
+              <th>Status</th>
               <th>Submitted</th>
               <th>Actions</th>
             </tr>
@@ -36,20 +37,36 @@
               <td class="name-cell">{{ r.employee_name }}</td>
               <td class="muted-text">{{ r.company_name || '—' }}</td>
               <td>{{ r.leave_type }}</td>
-              <td>{{ fmtDate(r.start_date) }}</td>
-              <td>{{ fmtDate(r.end_date) }}</td>
+              <td class="muted-text">{{ fmtDate(r.start_date) }}</td>
+              <td class="muted-text">{{ fmtDate(r.end_date) }}</td>
               <td class="num">{{ r.days_requested }}</td>
-              <td class="reason-cell muted-text">{{ r.reason || '—' }}</td>
+              <td class="reason-cell muted-text">
+                <span v-if="r.status === 'request_documentation' && r.documentation_requested_reason" class="docs-note">
+                  Docs requested: {{ r.documentation_requested_reason }}
+                </span>
+                <span v-else>{{ r.reason || '—' }}</span>
+              </td>
+              <td><span class="badge" :class="statusBadge(r.status)">{{ statusLabel(r.status) }}</span></td>
               <td class="muted-text">{{ fmtDate(r.created_at) }}</td>
               <td>
-                <div class="action-cell">
+                <div v-if="r.status === 'request_documentation'" class="muted-text" style="font-size:11px;white-space:nowrap">
+                  Awaiting employee docs
+                </div>
+                <div v-else class="action-cell">
+                  <button v-if="r.status === 'pending'" @click="markUnderReview(r)" :disabled="r._acting" class="btn-light btn-sm">Review</button>
                   <button @click="approve(r)" :disabled="r._acting" class="btn-primary btn-sm">Approve</button>
                   <button @click="startReject(r)" :disabled="r._acting" class="btn-light btn-sm">Reject</button>
+                  <button @click="startRequestDocs(r)" :disabled="r._acting" class="btn-secondary btn-sm">Req. Docs</button>
                 </div>
                 <div v-if="r._rejecting" class="reject-inline">
                   <input v-model="r._rejectNote" type="text" class="form-input reject-input" placeholder="Rejection note…" />
                   <button @click="confirmReject(r)" :disabled="r._acting" class="btn-secondary btn-sm">Confirm</button>
                   <button @click="r._rejecting = false" class="btn-light btn-sm">Cancel</button>
+                </div>
+                <div v-if="r._requestingDocs" class="reject-inline">
+                  <input v-model="r._docsReason" type="text" class="form-input reject-input" placeholder="What documentation is needed?" />
+                  <button @click="confirmRequestDocs(r)" :disabled="r._acting" class="btn-secondary btn-sm">Send</button>
+                  <button @click="r._requestingDocs = false" class="btn-light btn-sm">Cancel</button>
                 </div>
               </td>
             </tr>
@@ -75,21 +92,34 @@ export default {
       loading.value = true
       try {
         const { data } = await axios.get('/leave/pending')
-        requests.value = (data || []).map(r => ({ ...r, _rejecting: false, _rejectNote: '', _acting: false }))
+        requests.value = (data || []).map(r => ({
+          ...r,
+          _rejecting: false, _rejectNote: '',
+          _requestingDocs: false, _docsReason: '',
+          _acting: false
+        }))
       } catch {}
       loading.value = false
+    }
+
+    const markUnderReview = async (r) => {
+      r._acting = true
+      try {
+        await axios.put(`/leave/requests/${r.id}/review`, { status: 'under_review' })
+        await load()
+      } catch { r._acting = false }
     }
 
     const approve = async (r) => {
       r._acting = true
       try {
-        await axios.put(`/leave/requests/${r.id}/review`, { approved: true })
+        await axios.put(`/leave/requests/${r.id}/review`, { status: 'approved' })
         await load()
       } catch { r._acting = false }
     }
 
     const startReject = (r) => {
-      requests.value.forEach(x => { x._rejecting = false })
+      requests.value.forEach(x => { x._rejecting = false; x._requestingDocs = false })
       r._rejecting = true
       r._rejectNote = ''
     }
@@ -97,9 +127,24 @@ export default {
     const confirmReject = async (r) => {
       r._acting = true
       try {
-        await axios.put(`/leave/requests/${r.id}/review`, { approved: false, note: r._rejectNote })
+        await axios.put(`/leave/requests/${r.id}/review`, { status: 'rejected', note: r._rejectNote })
         await load()
       } catch { r._acting = false; r._rejecting = false }
+    }
+
+    const startRequestDocs = (r) => {
+      requests.value.forEach(x => { x._rejecting = false; x._requestingDocs = false })
+      r._requestingDocs = true
+      r._docsReason = ''
+    }
+
+    const confirmRequestDocs = async (r) => {
+      if (!r._docsReason.trim()) return
+      r._acting = true
+      try {
+        await axios.post(`/leave/requests/${r.id}/request-documents`, { reason: r._docsReason })
+        await load()
+      } catch { r._acting = false; r._requestingDocs = false }
     }
 
     const fmtDate = (s) => {
@@ -108,14 +153,41 @@ export default {
       catch { return s }
     }
 
+    const statusLabel = (s) => {
+      const map = {
+        pending: 'Pending',
+        under_review: 'Under Review',
+        request_documentation: 'Docs Requested',
+        approved: 'Approved',
+        rejected: 'Rejected',
+      }
+      return map[s] || s
+    }
+
+    const statusBadge = (s) => {
+      const map = {
+        pending: 'badge-yellow',
+        under_review: 'badge-blue',
+        request_documentation: 'badge-orange',
+        approved: 'badge-green',
+        rejected: 'badge-red',
+      }
+      return map[s] || 'badge-gray'
+    }
+
     onMounted(load)
-    return { loading, requests, load, approve, startReject, confirmReject, fmtDate }
+    return {
+      loading, requests, load,
+      markUnderReview, approve, startReject, confirmReject,
+      startRequestDocs, confirmRequestDocs,
+      fmtDate, statusLabel, statusBadge
+    }
   }
 }
 </script>
 
 <style scoped>
-.page-content { padding: 24px; max-width: 1200px; display: flex; flex-direction: column; gap: 24px; }
+.page-content { padding: 24px; max-width: 1300px; display: flex; flex-direction: column; gap: 24px; }
 .page-header { display: flex; justify-content: space-between; align-items: flex-start; }
 .page-title { font-size: 16px; font-weight: 500; color: var(--color-text-base); margin: 0 0 4px; }
 .breadcrumb { font-size: 11px; color: var(--color-text-muted); }
@@ -138,11 +210,20 @@ export default {
 .num { text-align: right; }
 .name-cell { font-weight: 500; white-space: nowrap; }
 .muted-text { color: var(--color-text-muted); font-size: 12px; }
-.reason-cell { max-width: 160px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.reason-cell { max-width: 200px; }
+.docs-note { font-style: italic; color: #92400e; font-size: 11px; }
 
-.action-cell { display: flex; gap: 6px; }
+.badge { display: inline-block; padding: 2px 9px; border-radius: 10px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+.badge-yellow  { background: #fef9c3; color: #854d0e; }
+.badge-blue    { background: #dbeafe; color: #1d4ed8; }
+.badge-orange  { background: #ffedd5; color: #92400e; }
+.badge-green   { background: #dcfce7; color: #15803d; }
+.badge-red     { background: #fee2e2; color: #b91c1c; }
+.badge-gray    { background: var(--color-bg-page); color: var(--color-text-muted); }
+
+.action-cell { display: flex; gap: 6px; flex-wrap: wrap; }
 .reject-inline { display: flex; gap: 6px; margin-top: 6px; align-items: center; flex-wrap: wrap; }
-.reject-input { flex: 1; min-width: 120px; font-size: 12px; padding: 4px 8px; }
+.reject-input { flex: 1; min-width: 140px; font-size: 12px; padding: 4px 8px; }
 .btn-sm { padding: 4px 12px; font-size: 12px; white-space: nowrap; }
 .form-input { background: var(--color-bg-card); border: 1px solid var(--color-border); border-radius: 6px; padding: 7px 10px; font-size: 13px; color: var(--color-text-base); width: 100%; box-sizing: border-box; }
 </style>
