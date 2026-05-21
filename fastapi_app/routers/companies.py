@@ -44,8 +44,8 @@ def list_companies(
                     a.company_id
                     for a in db.query(AccountantAssignment).filter_by(accountant_user_id=user.id)
                 }
-            # TODO: remove client_admin scope after data migration is confirmed
-            if "client_admin" in roles:
+            # TODO: remove manager scope after data migration is confirmed
+            if "manager" in roles:
                 allowed_company_ids |= {
                     uc.company_id for uc in db.query(UserCompany).filter_by(user_id=user.id)
                 }

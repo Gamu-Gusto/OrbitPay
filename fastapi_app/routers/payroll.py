@@ -590,7 +590,7 @@ def download_payslip_by_record(
     if not record:
         raise HTTPException(status_code=404, detail="Record not found")
     roles = getattr(user, "role_names", [])
-    if "employee" in roles and not any(r in roles for r in ("super_admin", "accountant", "client_admin")):
+    if "employee" in roles and not any(r in roles for r in ("super_admin", "accountant", "manager")):
         link = db.query(EmployeeUser).filter_by(user_id=user.id).first()
         if not link or link.employee_id != record.employee_id:
             raise HTTPException(status_code=403, detail="Forbidden")

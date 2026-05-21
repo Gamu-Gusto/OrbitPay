@@ -187,8 +187,8 @@ export default {
     const showRejectInput = ref(false)
     const rejectReason = ref('')
 
-    const canSubmit = computed(() => periodStatus.value === 'draft' && hasRole(['super_admin', 'accountant', 'client_admin']))
-    const canApprove = computed(() => periodStatus.value === 'submitted' && hasRole(['super_admin', 'client_admin']))
+    const canSubmit = computed(() => periodStatus.value === 'draft' && hasRole(['super_admin', 'accountant', 'manager']))
+    const canApprove = computed(() => periodStatus.value === 'submitted' && hasRole(['super_admin', 'manager']))
 
     const periodStatusLabel = computed(() => ({
       draft: 'Draft', submitted: 'Submitted for Approval', approved: 'Approved', rejected: 'Rejected', none: ''

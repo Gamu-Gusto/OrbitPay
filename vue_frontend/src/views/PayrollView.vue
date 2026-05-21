@@ -268,7 +268,7 @@
 
               <!-- Action Buttons -->
               <div class="action-buttons">
-                <div v-if="auth.roles.includes('client_admin') && selectedCompanyId && calculatedData" class="approval-row">
+                <div v-if="auth.roles.includes('manager') && selectedCompanyId && calculatedData" class="approval-row">
                   <button @click="approveRun" class="btn-secondary flex-1">Approve Run</button>
                   <button @click="rejectRun" class="btn-secondary flex-1">Reject Run</button>
                 </div>

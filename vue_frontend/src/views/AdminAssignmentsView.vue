@@ -38,13 +38,13 @@
           </div>
         </FormSection>
 
-        <!-- Assign Client Admin -->
-        <FormSection title="Assign Client Admin to Company" icon="user">
+        <!-- Assign Manager -->
+        <FormSection title="Assign Manager to Company" icon="user">
           <div class="form-group span-2">
-            <label class="form-label">Select Client Admin User</label>
-            <select v-model.number="client_admin_user_id" class="form-input">
-              <option :value="0">Select client admin user</option>
-              <option v-for="u in clientAdmins" :key="u.id" :value="u.id">
+            <label class="form-label">Select Manager User</label>
+            <select v-model.number="manager_user_id" class="form-input">
+              <option :value="0">Select manager user</option>
+              <option v-for="u in managers" :key="u.id" :value="u.id">
                 {{ u.first_name }} {{ u.last_name }} ({{ u.email }})
               </option>
             </select>
@@ -57,7 +57,7 @@
             </select>
           </div>
           <div class="form-group span-2">
-            <button @click="assignClientAdmin" class="btn-primary w-full">Assign Client Admin</button>
+            <button @click="assignManager" class="btn-primary w-full">Assign Manager</button>
           </div>
         </FormSection>
       </div>
@@ -109,12 +109,12 @@ export default {
     const API = ''
     const companies = ref([])
     const accountants = ref([])
-    const clientAdmins = ref([])
+    const managers = ref([])
     const employeesUsers = ref([])
     const employees = ref([])
 
     const accountant_user_id = ref(0)
-    const client_admin_user_id = ref(0)
+    const manager_user_id = ref(0)
     const employee_user_id = ref(0)
     const company_id_a = ref(0)
     const company_id_c = ref(0)
@@ -127,23 +127,14 @@ export default {
     }
     const loadUsers = async () => {
       try {
-        // Load accountants
-        const accountantsResponse = await axios.get(`${API}/users/accountants`)
-        accountants.value = accountantsResponse.data
-        
-        // Load client admins
-        const clientAdminsResponse = await axios.get(`${API}/users/client-admins`)
-        clientAdmins.value = clientAdminsResponse.data
-        
-        // Load employee users
-        const employeesResponse = await axios.get(`${API}/users/employees`)
-        employeesUsers.value = employeesResponse.data
-        
-        console.log('Loaded users:', {
-          accountants: accountants.value.length,
-          clientAdmins: clientAdmins.value.length,
-          employeeUsers: employeesUsers.value.length
-        })
+        const [acctRes, mgrRes, empRes] = await Promise.all([
+          axios.get(`${API}/users/accountants`),
+          axios.get(`${API}/users/managers`),
+          axios.get(`${API}/users/employees`),
+        ])
+        accountants.value   = acctRes.data
+        managers.value      = mgrRes.data
+        employeesUsers.value = empRes.data
       } catch (error) {
         console.error('Error loading users:', error)
       }
@@ -159,8 +150,8 @@ export default {
       await axios.post(`${API}/assignments/accountant`, { accountant_user_id: accountant_user_id.value, company_id: company_id_a.value })
       alert('Assigned')
     }
-    const assignClientAdmin = async () => {
-      await axios.post(`${API}/assignments/client-admin`, { user_id: client_admin_user_id.value, company_id: company_id_c.value })
+    const assignManager = async () => {
+      await axios.post(`${API}/assignments/manager`, { user_id: manager_user_id.value, company_id: company_id_c.value })
       alert('Assigned')
     }
     const linkEmployee = async () => {
@@ -169,7 +160,7 @@ export default {
     }
 
     onMounted(() => { loadCompanies(); loadUsers() })
-    return { companies, accountants, clientAdmins, employeesUsers, employees, accountant_user_id, client_admin_user_id, employee_user_id, company_id_a, company_id_c, company_id_e, employee_id, assignAccountant, assignClientAdmin, linkEmployee, loadCompanyEmployees }
+    return { companies, accountants, managers, employeesUsers, employees, accountant_user_id, manager_user_id, employee_user_id, company_id_a, company_id_c, company_id_e, employee_id, assignAccountant, assignManager, linkEmployee, loadCompanyEmployees }
   }
 }
 </script>

@@ -24,6 +24,7 @@ from routers.banking import router as banking_router
 from routers.reports import router as reports_router
 from routers.audit_log import router as audit_log_router
 from routers.self_service import router as self_service_router
+from routers.registrations import router as registrations_router
 from hr_reports import router as hr_reports_router
 
 
@@ -65,12 +66,19 @@ def run_migrations():
             except Exception:
                 conn.rollback()  # Column already exists — safe to ignore
 
+        # Rename client_admin role to manager (idempotent)
+        try:
+            conn.execute(text("UPDATE roles SET name='manager' WHERE name='client_admin'"))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+
 
 def seed_roles():
     db = SessionLocal()
     try:
         existing = {r.name for r in db.query(Role).all()}
-        for name in ["super_admin", "accountant", "client_admin", "employee"]:
+        for name in ["super_admin", "accountant", "manager", "employee"]:
             if name not in existing:
                 db.add(Role(name=name))
         db.commit()
@@ -129,6 +137,7 @@ app.include_router(banking_router)
 app.include_router(reports_router)
 app.include_router(audit_log_router)
 app.include_router(self_service_router)
+app.include_router(registrations_router)
 app.include_router(hr_reports_router, prefix="/api", tags=["hr-reports"])
 
 

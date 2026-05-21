@@ -108,6 +108,23 @@
           <span>Admin</span>
         </router-link>
 
+        <router-link
+          v-if="auth.hasPermission('CREATE_USER')"
+          to="/admin/registrations"
+          class="nav-link"
+          :class="{ 'is-active': isRegistrations }"
+          @click="$emit('close')"
+          data-label="Registrations"
+        >
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <polyline points="16 11 18 13 22 9"/>
+          </svg>
+          <span>Registrations</span>
+          <span v-if="pendingCounts.registrations > 0" class="nav-badge">{{ pendingCounts.registrations }}</span>
+        </router-link>
+
         <span v-if="auth.hasPermission('APPROVE_LEAVE')" class="nav-section-label" style="margin-top:8px">Approvals</span>
 
         <router-link
@@ -264,33 +281,35 @@ export default {
     const auth  = useAuthStore()
 
     const isEmployeeOnly = computed(() =>
-      auth.roles.includes('employee') && !auth.roles.some(r => ['super_admin', 'accountant'].includes(r))
+      auth.roles.includes('employee') && !auth.roles.some(r => ['super_admin', 'accountant', 'manager'].includes(r))
     )
 
-    const isDashboard    = computed(() => route.path === '/')
-    const isPayroll      = computed(() => route.path === '/payroll')
-    const isBulk         = computed(() => route.path === '/payroll/bulk')
-    const isCompanies    = computed(() => route.path.startsWith('/companies'))
-    const isHR           = computed(() => route.path.startsWith('/hr-reports'))
-    const isAdmin        = computed(() => route.path.startsWith('/admin'))
-    const isAudit        = computed(() => route.path === '/audit')
-    const isReports      = computed(() => route.path === '/reports')
-    const isPortal       = computed(() => route.path === '/portal')
-    const isLeave        = computed(() => route.path === '/leave')
-    const isCompliance   = computed(() => route.path === '/compliance')
+    const isDashboard      = computed(() => route.path === '/')
+    const isPayroll        = computed(() => route.path === '/payroll')
+    const isBulk           = computed(() => route.path === '/payroll/bulk')
+    const isCompanies      = computed(() => route.path.startsWith('/companies'))
+    const isHR             = computed(() => route.path.startsWith('/hr-reports'))
+    const isAdmin          = computed(() => route.path === '/admin/assignments')
+    const isRegistrations  = computed(() => route.path === '/admin/registrations')
+    const isAudit          = computed(() => route.path === '/audit')
+    const isReports        = computed(() => route.path === '/reports')
+    const isPortal         = computed(() => route.path === '/portal')
+    const isLeave          = computed(() => route.path === '/leave')
+    const isCompliance     = computed(() => route.path === '/compliance')
     const isLeaveApprovals = computed(() => route.path === '/approvals/leave')
     const isDocApprovals   = computed(() => route.path === '/approvals/documents')
     const isBankApprovals  = computed(() => route.path === '/approvals/banking')
 
-    const pendingCounts = reactive({ leave: 0, documents: 0, banking: 0 })
+    const pendingCounts = reactive({ leave: 0, documents: 0, banking: 0, registrations: 0 })
 
     const fetchPendingCounts = async () => {
-      if (!auth.hasPermission('APPROVE_LEAVE')) return
+      if (!auth.hasPermission('APPROVE_LEAVE') && !auth.hasPermission('CREATE_USER')) return
       try {
         const { data } = await axios.get('/dashboard/stats')
-        pendingCounts.leave     = data.pending_leave     || 0
-        pendingCounts.documents = data.pending_documents || 0
-        pendingCounts.banking   = data.pending_banking   || 0
+        pendingCounts.leave          = data.pending_leave          || 0
+        pendingCounts.documents      = data.pending_documents      || 0
+        pendingCounts.banking        = data.pending_banking        || 0
+        pendingCounts.registrations  = data.pending_registrations  || 0
       } catch {}
     }
 
@@ -321,7 +340,7 @@ export default {
 
     const logout = () => { auth.logout() }
 
-    return { auth, isEmployeeOnly, isDashboard, isPayroll, isBulk, isCompanies, isHR, isAdmin, isAudit, isReports, isPortal, isLeave, isCompliance, isLeaveApprovals, isDocApprovals, isBankApprovals, pendingCounts, initials, fullName, formattedRole, logout }
+    return { auth, isEmployeeOnly, isDashboard, isPayroll, isBulk, isCompanies, isHR, isAdmin, isRegistrations, isAudit, isReports, isPortal, isLeave, isCompliance, isLeaveApprovals, isDocApprovals, isBankApprovals, pendingCounts, initials, fullName, formattedRole, logout }
   }
 }
 </script>

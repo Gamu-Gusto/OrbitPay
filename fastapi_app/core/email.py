@@ -33,6 +33,43 @@ def send_reset_email(to_email: str, token: str, frontend_url: str, reset_minutes
     _send_email(to_email, "OrbitPay — Password Reset Request", body)
 
 
+def send_registration_received_email(to_email: str, full_name: str) -> None:
+    body = (
+        f"Hello {full_name},\n\n"
+        f"Thank you for registering with OrbitPay.\n\n"
+        f"Your registration request has been received and is currently under review.\n"
+        f"You will be notified by email once your account has been reviewed.\n\n"
+        f"— The OrbitPay Team"
+    )
+    _send_email(to_email, "OrbitPay — Registration Request Received", body)
+
+
+def send_registration_approved_email(to_email: str, full_name: str, frontend_url: str) -> None:
+    login_url = f"{frontend_url}/login?tab=staff"
+    body = (
+        f"Hello {full_name},\n\n"
+        f"Great news — your OrbitPay account has been approved!\n\n"
+        f"You can now log in using the credentials you registered with:\n"
+        f"  URL:   {login_url}\n"
+        f"  Email: {to_email}\n\n"
+        f"Use the 'Staff Access' tab to sign in.\n\n"
+        f"— The OrbitPay Team"
+    )
+    _send_email(to_email, "OrbitPay — Your Account Has Been Approved", body)
+
+
+def send_registration_rejected_email(to_email: str, full_name: str, reason: str) -> None:
+    body = (
+        f"Hello {full_name},\n\n"
+        f"We have reviewed your OrbitPay registration request and unfortunately "
+        f"we are unable to approve it at this time.\n\n"
+        f"Reason: {reason or 'Not specified'}\n\n"
+        f"If you believe this is an error or have questions, please contact us.\n\n"
+        f"— The OrbitPay Team"
+    )
+    _send_email(to_email, "OrbitPay — Registration Not Approved", body)
+
+
 def send_welcome_email(to_email: str, full_name: str, temp_password: str, frontend_url: str) -> None:
     login_url = f"{frontend_url}/login"
     body = (

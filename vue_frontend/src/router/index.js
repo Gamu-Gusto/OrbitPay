@@ -116,6 +116,18 @@ const router = createRouter({
       name: 'changePassword',
       component: () => import('../views/ChangePasswordView.vue'),
       meta: { requiresAuth: true }
+    },
+    {
+      path: '/admin/registrations',
+      name: 'accountantRegistrations',
+      component: () => import('../views/AccountantRegistrationsView.vue'),
+      meta: { requiresAuth: true, permission: 'CREATE_USER' }
+    },
+    {
+      path: '/manager',
+      name: 'managerDashboard',
+      component: () => import('../views/DashboardView.vue'),
+      meta: { requiresAuth: true }
     }
   ]
 })
@@ -131,8 +143,9 @@ router.beforeEach(async (to, from, next) => {
 
   if (publicRoutes.includes(to.path)) {
     if (auth.isAuthenticated) {
-      const isEmp = auth.roles.includes('employee') &&
-        !auth.roles.some(r => ['super_admin', 'accountant'].includes(r))
+      const roles = auth.roles
+      const isEmp = roles.includes('employee') &&
+        !roles.some(r => ['super_admin', 'accountant', 'manager'].includes(r))
       next(isEmp ? '/portal' : '/')
     } else {
       next()
@@ -146,7 +159,7 @@ router.beforeEach(async (to, from, next) => {
   }
 
   const isEmployeeOnly = auth.roles.includes('employee') &&
-    !auth.roles.some(r => ['super_admin', 'accountant'].includes(r))
+    !auth.roles.some(r => ['super_admin', 'accountant', 'manager'].includes(r))
 
   // Block employees from all admin routes
   if (isEmployeeOnly && !EMPLOYEE_ALLOWED.includes(to.path)) {

@@ -6,7 +6,7 @@ from db import get_db
 from orm_models import AccountantAssignment, Company, Employee, EmployeeUser, Role, User, UserCompany, UserRole
 from schemas import (
     AccountantAssignRequest,
-    ClientAdminAssignRequest,
+    ManagerAssignRequest,
     EmployeeLinkRequest,
     UserRead,
 )
@@ -54,14 +54,14 @@ def list_accountants(
     return list_users(role="accountant", skip=skip, limit=limit, db=db, user=user)
 
 
-@router.get("/users/client-admins", response_model=list[UserRead])
-def list_client_admins(
+@router.get("/users/managers", response_model=list[UserRead])
+def list_managers(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
     user: User = Depends(require_permission("MANAGE_ASSIGNMENTS")),
 ):
-    return list_users(role="client_admin", skip=skip, limit=limit, db=db, user=user)
+    return list_users(role="manager", skip=skip, limit=limit, db=db, user=user)
 
 
 @router.get("/users/employees", response_model=list[UserRead])
@@ -87,9 +87,9 @@ def assign_accountant(
     return {"ok": True}
 
 
-@router.post("/assignments/client-admin")
-def assign_client_admin(
-    body: ClientAdminAssignRequest,
+@router.post("/assignments/manager")
+def assign_manager(
+    body: ManagerAssignRequest,
     db: Session = Depends(get_db),
     user: User = Depends(require_permission("MANAGE_ASSIGNMENTS")),
 ):

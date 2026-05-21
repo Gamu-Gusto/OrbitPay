@@ -45,7 +45,7 @@ def _allowed_ids(user, db) -> set[int] | None:
     ids: set[int] = set()
     if "accountant" in roles:
         ids |= {a.company_id for a in db.query(AccountantAssignment).filter_by(accountant_user_id=user.id)}
-    if "client_admin" in roles:
+    if "manager" in roles:
         ids |= {uc.company_id for uc in db.query(UserCompany).filter_by(user_id=user.id)}
     return ids
 

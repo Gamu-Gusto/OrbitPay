@@ -90,6 +90,11 @@ def login(request: Request, req: LoginRequest, db: Session = Depends(get_db)):
             db.commit()
             raise HTTPException(status_code=401, detail="Invalid credentials")
         roles = [db.get(Role, ur.role_id).name for ur in user.roles]
+        is_employee_only = "employee" in roles and not any(r in roles for r in ("super_admin", "accountant", "manager"))
+        if req.login_context == "employee" and not is_employee_only:
+            raise HTTPException(status_code=403, detail="Use Staff Access to log in")
+        if req.login_context == "staff" and is_employee_only:
+            raise HTTPException(status_code=403, detail="Use Employee Login to log in")
         company_ids = []
         if "accountant" in roles:
             company_ids = [

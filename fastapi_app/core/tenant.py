@@ -16,8 +16,8 @@ def get_company(company_id: int, db: Session, user) -> Company:
             accountant_user_id=user.id, company_id=company_id
         ).first():
             allowed = True
-        # TODO: remove client_admin scope after data migration is confirmed
-        if "client_admin" in roles and db.query(UserCompany).filter_by(
+        # TODO: remove manager scope after data migration is confirmed
+        if "manager" in roles and db.query(UserCompany).filter_by(
             user_id=user.id, company_id=company_id
         ).first():
             allowed = True

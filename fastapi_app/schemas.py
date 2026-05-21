@@ -180,6 +180,7 @@ class ChangePasswordRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+    login_context: Optional[str] = None  # "employee" | "staff"
 
 
 class TokenResponse(BaseModel):
@@ -287,9 +288,12 @@ class AccountantAssignRequest(BaseModel):
     company_id: int
 
 
-class ClientAdminAssignRequest(BaseModel):
+class ManagerAssignRequest(BaseModel):
     user_id: int
     company_id: int
+
+
+ClientAdminAssignRequest = ManagerAssignRequest  # backward-compat alias
 
 
 class EmployeeLinkRequest(BaseModel):
@@ -349,6 +353,34 @@ class BankingChangeRead(BaseModel):
 
 
 class BankingChangeReviewRequest(BaseModel):
+    status: str  # "approved" | "rejected"
+    reason: Optional[str] = None
+
+
+# ------------------ Accountant Registration ------------------
+class AccountantRegistrationCreate(BaseModel):
+    full_name: str
+    email: EmailStr
+    password: str = Field(..., min_length=8, max_length=64)
+    firm_name: Optional[str] = None
+    phone: Optional[str] = None
+
+
+class AccountantRegistrationRead(BaseModel):
+    id: int
+    full_name: str
+    email: str
+    firm_name: Optional[str] = None
+    phone: Optional[str] = None
+    status: str
+    rejection_reason: Optional[str] = None
+    requested_at: str
+
+    class Config:
+        from_attributes = True
+
+
+class AccountantRegistrationReview(BaseModel):
     status: str  # "approved" | "rejected"
     reason: Optional[str] = None
 
