@@ -18,6 +18,14 @@ from schemas import DocumentReviewRequest
 
 router = APIRouter(tags=["documents"])
 
+_ALLOWED_DOCUMENT_MIME = {
+    "application/pdf",
+    "image/jpeg",
+    "image/png",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+}
+
 
 def _admin_recipient_ids(employee_id: int, db: Session) -> list[int]:
     """Return user IDs of all super_admins and accountants assigned to the employee's company.
@@ -55,6 +63,10 @@ async def upload_my_document(
     link = db.query(EmployeeUser).filter_by(user_id=user.id).first()
     if not link:
         raise HTTPException(status_code=400, detail="No employee profile linked to your account")
+    content_type = file.content_type or ""
+    if content_type not in _ALLOWED_DOCUMENT_MIME:
+        raise HTTPException(status_code=400, detail="File type not allowed. Upload PDF, JPEG, PNG, or Word documents only.")
+    safe_name = (file.filename or "document").replace("/", "_").replace("\\", "_")
     raw = await file.read()
     if len(raw) > 5 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="File too large (max 5 MB)")
@@ -64,7 +76,7 @@ async def upload_my_document(
         uploaded_by=user.id,
         document_type=document_type,
         description=description or None,
-        file_name=file.filename or "document",
+        file_name=safe_name,
         file_data=encoded,
         file_size=len(raw),
         status="pending",
@@ -74,7 +86,7 @@ async def upload_my_document(
 
     emp = db.get(Employee, link.employee_id)
     log_audit(db, user.id, "document.upload", "employee", link.employee_id,
-              {"type": document_type, "file": file.filename},
+              {"type": document_type, "file": safe_name},
               company_id=emp.company_id if emp else None)
 
     # Bulk-notify all super_admins and assigned accountants

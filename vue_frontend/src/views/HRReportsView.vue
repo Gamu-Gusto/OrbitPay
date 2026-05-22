@@ -19,7 +19,6 @@
       </div>
 
       <!-- Loading & Error -->
-      <div v-if="loading" class="text-sm text-muted mb-4">Loading reports...</div>
       <div v-if="errorMessage" class="text-sm text-error mb-4">{{ errorMessage }}</div>
 
       <!-- Company Selector -->
@@ -30,13 +29,10 @@
         </select>
       </div>
 
+      <!-- Loading skeleton -->
+      <SkeletonDashboard v-if="loading" />
+
       <!-- Metric Cards -->
-      <div v-if="loading" class="skeleton-grid">
-        <div v-for="n in 4" :key="n" class="skeleton-card">
-          <div class="skeleton-line"></div>
-          <div class="skeleton-value"></div>
-        </div>
-      </div>
       <div v-else class="metrics-grid">
         <MetricCard label="Active Employees" :value="headcount.active" />
         <MetricCard label="Terminated" :value="headcount.terminated" type="error" />
@@ -162,10 +158,11 @@ import { formatCurrencyZAR } from '../utils/format'
 import { exportToCSV } from '../utils/export'
 
 import MetricCard from '../components/MetricCard.vue'
+import SkeletonDashboard from '../components/ui/SkeletonDashboard.vue'
 
 export default {
   name: 'HRReportsView',
-  components: { MetricCard },
+  components: { MetricCard, SkeletonDashboard },
   setup() {
     const headcount = ref({ active: 0, terminated: 0 })
     const turnoverRate = ref(0)

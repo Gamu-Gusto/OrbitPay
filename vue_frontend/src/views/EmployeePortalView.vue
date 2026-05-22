@@ -12,10 +12,7 @@
       </div>
     </div>
 
-    <div v-if="loading" class="loading-state">
-      <div class="spinner"></div>
-      <span>Loading your portal…</span>
-    </div>
+    <SkeletonEmployeePortal v-if="loading" />
 
     <div v-else-if="noProfile" class="card warn-card">
       <svg class="warn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -639,9 +636,11 @@
 import { ref, computed, onMounted, reactive, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
+import SkeletonEmployeePortal from '../components/ui/SkeletonEmployeePortal.vue'
 
 export default {
   name: 'EmployeePortalView',
+  components: { SkeletonEmployeePortal },
   setup() {
     const route = useRoute()
     const router = useRouter()

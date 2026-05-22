@@ -61,7 +61,7 @@
       <section class="section">
         <h2 class="section-title">My Leave Balances</h2>
         <div class="card">
-          <div v-if="loadingEmployee" class="loading-state"><div class="spinner"></div><span>Loading…</span></div>
+          <SkeletonTable v-if="loadingEmployee" :rows="5" :cols="4" />
           <div v-else-if="leaveBalances.length === 0" class="empty-state">No balances found.</div>
           <div v-else class="table-wrap">
             <table class="data-table">
@@ -92,7 +92,7 @@
       <section class="section">
         <h2 class="section-title">My Requests</h2>
         <div class="card">
-          <div v-if="loadingEmployee" class="loading-state"><div class="spinner"></div><span>Loading…</span></div>
+          <SkeletonTable v-if="loadingEmployee" :rows="5" :cols="4" />
           <div v-else-if="myRequests.length === 0" class="empty-state">No leave requests yet.</div>
           <div v-else class="table-wrap">
             <table class="data-table">
@@ -157,7 +157,7 @@
 
         <div class="card">
           <div v-if="!mgr.companyId" class="empty-state">Select a company to view requests.</div>
-          <div v-else-if="loadingManager" class="loading-state"><div class="spinner"></div><span>Loading…</span></div>
+          <SkeletonTable v-else-if="loadingManager" :rows="5" :cols="4" />
           <div v-else-if="managerRequests.length === 0" class="empty-state">No requests found.</div>
           <div v-else class="table-wrap">
             <table class="data-table">
@@ -214,9 +214,11 @@ import { ref, computed, reactive, onMounted } from 'vue'
 import axios from 'axios'
 import { useAuthStore } from '../stores/auth'
 import { useLeaveFormatting } from '../composables/useLeaveFormatting'
+import SkeletonTable from '../components/ui/SkeletonTable.vue'
 
 export default {
   name: 'LeaveView',
+  components: { SkeletonTable },
   setup() {
     const auth = useAuthStore()
     const { fmtDate, statusLabel, statusBadge } = useLeaveFormatting()

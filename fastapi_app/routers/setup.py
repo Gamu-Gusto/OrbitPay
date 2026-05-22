@@ -1,10 +1,11 @@
 import os
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from auth import hash_password
 from core.audit import log_audit
+from core.limiter import limiter
 from db import get_db
 from orm_models import Role, SystemConfig, User, UserRole
 from schemas import AdminSetupRequest
@@ -19,7 +20,9 @@ def setup_status(db: Session = Depends(get_db)):
 
 
 @router.post("/setup", status_code=201)
+@limiter.limit("5/hour")
 def admin_setup(
+    request: Request,
     body: AdminSetupRequest,
     x_setup_secret: str = Header(default=None, alias="X-Setup-Secret"),
     db: Session = Depends(get_db),

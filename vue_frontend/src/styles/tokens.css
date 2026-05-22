@@ -1,0 +1,109 @@
+/*
+ * OrbitPay Design Tokens
+ * Single source of truth for all design variables.
+ * Imported via main.js after style.css.
+ * Brand: Navy primary (#1a2744), blue accent (#3b82f6)
+ */
+
+:root {
+  /* ── Brand ──────────────────────────────────────────────────────────── */
+  --color-primary:       #1a2744;
+  --color-primary-dark:  #0f172a;
+  --color-primary-hover: #243454;
+  --color-primary-light: #eef1f8;
+  --color-accent:        #3b82f6;
+
+  /* ── Backgrounds ────────────────────────────────────────────────────── */
+  --color-bg:               #F8F9FB;
+  --color-bg-page:          #F1F5F9;
+  --color-surface:          #FFFFFF;
+  --color-bg-card:          #FFFFFF;
+  --color-surface-secondary:#F2F4F7;
+  --color-bg-sidebar:       #0F172A;
+  --color-bg-sidebar-hover: rgba(255,255,255,0.07);
+  --color-bg-sidebar-active:rgba(255,255,255,0.13);
+  --color-bg-header:        #FFFFFF;
+
+  /* ── Text ───────────────────────────────────────────────────────────── */
+  --color-text-primary:   #101828;
+  --color-text-base:      #1E293B;
+  --color-text-secondary: #475467;
+  --color-text-muted:     #64748B;
+  --color-text-inverse:   #FFFFFF;
+  --color-text-sidebar:        rgba(255,255,255,0.78);
+  --color-text-sidebar-active: #FFFFFF;
+  --color-text-sidebar-muted:  rgba(255,255,255,0.40);
+
+  /* ── Borders ────────────────────────────────────────────────────────── */
+  --color-border:       #E2E8F0;
+  --color-border-input: #CBD5E1;
+  --color-border-strong:#C8CDD6;
+
+  /* ── Semantic: Success ──────────────────────────────────────────────── */
+  --color-success:        #12B76A;
+  --color-success-light:  #ECFDF3;
+  --color-success-bg:     #F0FDF4;
+  --color-success-border: #BBF7D0;
+
+  /* ── Semantic: Warning (new) ────────────────────────────────────────── */
+  --color-warning:        #F79009;
+  --color-warning-light:  #FFFAEB;
+  --color-warning-bg:     #FFFAEB;
+  --color-warning-border: #FEC84B;
+
+  /* ── Semantic: Danger / Error ───────────────────────────────────────── */
+  --color-danger:         #F04438;
+  --color-danger-light:   #FEF3F2;
+  --color-error:          #EF4444;
+  --color-error-bg:       #FEF2F2;
+  --color-error-border:   #FECACA;
+
+  /* ── Semantic: Info ─────────────────────────────────────────────────── */
+  --color-info:        #2E90FA;
+  --color-info-light:  #EFF8FF;
+  --color-info-bg:     #EFF6FF;
+  --color-info-border: #BFDBFE;
+
+  /* ── Typography scale ───────────────────────────────────────────────── */
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  --text-xs:   11px;
+  --text-sm:   13px;
+  --text-base: 14px;
+  --text-md:   15px;
+  --text-lg:   18px;
+  --text-xl:   22px;
+  --text-2xl:  28px;
+
+  /* ── Spacing ────────────────────────────────────────────────────────── */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+
+  /* ── Radius ─────────────────────────────────────────────────────────── */
+  --radius-sm:   4px;
+  --radius-md:   8px;
+  --radius-lg:   12px;
+  --radius-xl:   16px;
+  --radius-full: 9999px;
+
+  /* ── Shadows ────────────────────────────────────────────────────────── */
+  --shadow-xs: 0 1px 2px rgba(16,24,40,0.05);
+  --shadow-sm: 0 1px 3px rgba(16,24,40,0.10), 0 1px 2px rgba(16,24,40,0.06);
+  --shadow-md: 0 4px 8px rgba(16,24,40,0.08), 0 2px 4px rgba(16,24,40,0.04);
+
+  /* ── Transitions ────────────────────────────────────────────────────── */
+  --transition-fast: 120ms ease;
+  --transition-base: 200ms ease;
+
+  /* ── Layout ─────────────────────────────────────────────────────────── */
+  --sidebar-width:  224px;
+  --topbar-height:  52px;
+  --header-height:  56px;
+}

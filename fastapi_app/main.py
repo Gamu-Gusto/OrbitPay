@@ -2,13 +2,18 @@ import os
 import uvicorn
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from sqlalchemy import text
 
 from core.limiter import limiter
+from core.logging_config import logger
+from middleware.security_headers import SecurityHeadersMiddleware
+from middleware.error_handler import global_error_handler
 from db import Base, engine, SessionLocal
 from orm_models import Role, SystemConfig
 
@@ -79,6 +84,7 @@ def run_migrations():
         ]
         for table, col, col_type in cols:
             try:
+                # NOTE: table/col/col_type values are hardcoded in this file — not user-controlled. Safe from injection.
                 conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}"))
                 conn.commit()
             except Exception:
@@ -131,6 +137,7 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     seed_roles()
     seed_system_config()
+    logger.info("OrbitPay API started")
     yield
 
 
@@ -142,6 +149,9 @@ app = FastAPI(
 )
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_exception_handler(Exception, global_error_handler)
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 _allowed_origins = [
     "http://localhost:5173", "http://127.0.0.1:5173",
@@ -160,8 +170,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "X-Requested-With"],
 )
 
 app.include_router(auth_router)

@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from auth import (
@@ -16,6 +17,7 @@ from auth import (
 )
 from core.audit import log_audit
 from core.email import send_reset_email, send_welcome_email  # noqa: F401 (re-exported for employees router)
+from core.logging_config import logger
 from core.guards import get_current_user
 from core.limiter import limiter
 from db import get_db
@@ -90,6 +92,7 @@ def login(request: Request, req: LoginRequest, db: Session = Depends(get_db)):
         if not verify_password(req.password, user.password_hash):
             log_audit(db, user.id, "user.login_failed", "user", user.id, ip_address=ip)
             db.commit()
+            logger.warning(f"Failed login attempt for {req.email} from {ip}")
             raise HTTPException(status_code=401, detail="Invalid credentials")
         roles = [db.get(Role, ur.role_id).name for ur in user.roles]
         company_ids = []
@@ -108,11 +111,13 @@ def login(request: Request, req: LoginRequest, db: Session = Depends(get_db)):
         ))
         log_audit(db, user.id, "user.login", "user", user.id, ip_address=ip)
         db.commit()
-        return TokenResponse(
+        logger.info(f"Successful login for user {user.id} from {ip}")
+        token_resp = TokenResponse(
             access_token=token,
             refresh_token=raw_refresh,
             user=_user_read(user, roles, company_ids),
         )
+        return JSONResponse(content=token_resp.model_dump(), headers={"Cache-Control": "no-store"})
     except HTTPException:
         raise
     except Exception as e:
@@ -180,7 +185,8 @@ def refresh_access_token(request: Request, body: RefreshRequest, db: Session = D
 
 
 @router.post("/activate")
-def activate_account(body: ActivateAccountRequest, db: Session = Depends(get_db)):
+@limiter.limit("10/hour")
+def activate_account(request: Request, body: ActivateAccountRequest, db: Session = Depends(get_db)):
     if body.new_password != body.confirm_password:
         raise HTTPException(status_code=400, detail="Passwords do not match")
     token_hash = hash_refresh_token(body.token)

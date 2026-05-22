@@ -64,10 +64,7 @@
           </tbody>
         </table>
         <div v-else-if="!loading" class="empty-state">No audit events found.</div>
-        <div v-if="loading" class="loading-state">
-          <div class="spinner"></div>
-          <span>Loading…</span>
-        </div>
+        <SkeletonTable v-if="loading" :rows="8" :cols="4" />
       </div>
 
       <!-- Pagination -->
@@ -84,11 +81,13 @@
 <script>
 import { ref, computed, onMounted } from 'vue'
 import axios from 'axios'
+import SkeletonTable from '../components/ui/SkeletonTable.vue'
 
 const PAGE_SIZE = 50
 
 export default {
   name: 'AuditLogView',
+  components: { SkeletonTable },
   setup() {
     const events = ref([])
     const total = ref(0)

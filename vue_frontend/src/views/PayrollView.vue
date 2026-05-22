@@ -22,6 +22,9 @@
         </div>
       </div>
 
+      <!-- Loading skeleton -->
+      <SkeletonTable v-if="loading" :rows="5" :cols="5" />
+
       <!-- Metric Cards -->
       <div class="metric-cards" v-if="calculatedData">
         <MetricCard label="Gross Pay" :value="calculatedData.total_earnings" />
@@ -398,15 +401,18 @@ import axios from 'axios'
 import { useAuthStore } from '../stores/auth'
 import MetricCard from '../components/MetricCard.vue'
 import FormSection from '../components/FormSection.vue'
+import SkeletonTable from '../components/ui/SkeletonTable.vue'
 
 export default {
   name: 'PayrollView',
   components: {
     MetricCard,
-    FormSection
+    FormSection,
+    SkeletonTable,
   },
   setup() {
     const auth = useAuthStore()
+    const loading = ref(false)
     const activeTab = ref('details')
     const activeSection = ref('payrun')
     const isCalculating = ref(false)
@@ -500,11 +506,14 @@ export default {
     const selectedEmployeeId = ref(0)
 
     const loadCompanies = async () => {
+      loading.value = true
       try {
         const { data } = await axios.get(`${API}/companies`)
         companies.value = data
       } catch (e) {
         console.error('Failed to load companies', e)
+      } finally {
+        loading.value = false
       }
     }
 
@@ -713,6 +722,7 @@ export default {
 
     return {
       auth,
+      loading,
       activeTab,
       activeSection,
       isCalculating,

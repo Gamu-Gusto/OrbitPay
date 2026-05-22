@@ -7,6 +7,12 @@ export const useAuthStore = defineStore('auth', {
       return { accessToken: null, refreshToken: null, user: null }
     }
     try {
+      // SECURITY TODO: JWT stored in localStorage is vulnerable to XSS attacks.
+      // An attacker who achieves XSS can steal the token and impersonate the user.
+      // Migrate to httpOnly cookies when backend session handling supports it.
+      // Do not change the storage mechanism without updating the entire auth flow,
+      // the backend CORS config (credentials: true), and all API call patterns.
+      // Priority: Medium — acceptable risk for current threat model, fix before public launch.
       return {
         accessToken: localStorage.getItem('accessToken'),
         refreshToken: localStorage.getItem('refreshToken'),

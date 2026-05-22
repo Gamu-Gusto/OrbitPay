@@ -3,6 +3,8 @@ import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
 import './style.css'
+import './styles/tokens.css'
+import './styles/components.css'
 import axios from 'axios'
 import { useAuthStore } from './stores/auth'
 
@@ -10,10 +12,36 @@ if (import.meta.env.VITE_API_URL) {
   axios.defaults.baseURL = import.meta.env.VITE_API_URL
 }
 
+axios.defaults.timeout = 15000
+// SECURITY TODO: JWT stored in localStorage is vulnerable to XSS.
+// Migrate to httpOnly cookies when backend session handling is updated.
+// Do not change storage without updating the full auth flow.
+axios.defaults.withCredentials = false  // Keep false — using Bearer tokens, not cookies
+
 const app = createApp(App)
 const pinia = createPinia()
 app.use(pinia)
 app.use(router)
+
+function showToast(message, type = 'error') {
+  const existing = document.getElementById('orbit-toast')
+  if (existing) existing.remove()
+  const el = document.createElement('div')
+  el.id = 'orbit-toast'
+  el.style.cssText = [
+    'position:fixed', 'bottom:24px', 'right:24px', 'z-index:9999',
+    'padding:12px 16px', 'border-radius:8px', 'font-size:13px',
+    'font-family:Inter,system-ui,sans-serif', 'max-width:320px',
+    'line-height:1.4', 'pointer-events:none',
+    'box-shadow:0 4px 16px rgba(0,0,0,0.15)',
+    type === 'warning'
+      ? 'background:#F79009;color:#fff'
+      : 'background:#F04438;color:#fff'
+  ].join(';')
+  el.textContent = message
+  document.body.appendChild(el)
+  setTimeout(() => el.remove(), 5000)
+}
 
 // Attach Authorization header to every outgoing request
 axios.interceptors.request.use((config) => {
@@ -79,6 +107,27 @@ axios.interceptors.response.use(
         if (window.location.pathname !== '/login') window.location.href = '/login'
         return Promise.reject(error)
       }
+    }
+
+    // 403 — authenticated but not authorised
+    if (status === 403) {
+      if (window.location.pathname !== '/forbidden') {
+        window.location.href = '/forbidden'
+      }
+      return Promise.reject(error)
+    }
+
+    // 429 — rate limited
+    if (status === 429) {
+      showToast('Too many requests — please wait a moment.', 'warning')
+      return Promise.reject(error)
+    }
+
+    // 5xx — server error
+    if (status >= 500) {
+      console.error('[OrbitPay] Server error:', error.response?.data)
+      showToast('Something went wrong. Please try again.')
+      return Promise.reject(error)
     }
 
     return Promise.reject(error)

@@ -16,8 +16,11 @@
         </div>
       </div>
 
+      <!-- Loading skeleton -->
+      <SkeletonTable v-if="loading" :rows="4" :cols="3" />
+
       <!-- Companies Table -->
-      <div class="card">
+      <div v-else class="card">
         <table class="data-table">
           <thead>
             <tr>
@@ -101,11 +104,13 @@ import { ref, reactive, onMounted } from 'vue'
 import axios from 'axios'
 import { useAuthStore } from '../stores/auth'
 import { useRouter } from 'vue-router'
+import SkeletonTable from '../components/ui/SkeletonTable.vue'
 export default {
   name: 'CompaniesView',
-  components: {},
+  components: { SkeletonTable },
   setup(_, { emit, expose }) {
     const companies = ref([])
+    const loading = ref(false)
     const showModal = ref(false)
     const editingCompany = ref(null)
     const router = useRouter()
@@ -123,6 +128,7 @@ export default {
     // Using relative URLs to go through Vite proxy
 
     const loadCompanies = async () => {
+      loading.value = true
       try {
         console.log('Loading companies')
         const { data } = await axios.get('/companies', {
@@ -154,6 +160,8 @@ export default {
         
         console.log('Final error message:', errorMessage)
         alert(`Error: ${errorMessage}`)
+      } finally {
+        loading.value = false
       }
     }
 
@@ -296,7 +304,7 @@ export default {
       loadCompanies()
     })
 
-    return { companies, showModal, editingCompany, form, openCreateCompany, openEditCompany, closeModal, saveCompany, deleteCompany, manageEmployees, handleSidebarNav }
+    return { companies, loading, showModal, editingCompany, form, openCreateCompany, openEditCompany, closeModal, saveCompany, deleteCompany, manageEmployees, handleSidebarNav }
   }
 }
 </script>

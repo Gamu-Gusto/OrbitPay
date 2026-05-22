@@ -11,7 +11,7 @@ from datetime import date, datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
 from core.guards import get_current_user
@@ -106,6 +106,8 @@ def _upcoming_holidays(n: int = 3) -> list[dict]:
 
 # ── Dashboard summary — single aggregation call ───────────────────────────
 
+# TODO: cache this with Redis when budget allows
+# Suggested TTL: 60s for leave balances, 300s for company-level aggregates
 @router.get("/dashboard-summary")
 def dashboard_summary(
     user: User = Depends(get_current_user),
@@ -456,15 +458,18 @@ def get_portal_announcements(
         .limit(10)
         .all()
     )
-    return [
-        {
-            "id": a.id,
-            "title": a.title,
-            "body": a.body,
-            "created_at": a.created_at.isoformat(),
-        }
-        for a in items
-    ]
+    return JSONResponse(
+        content=[
+            {
+                "id": a.id,
+                "title": a.title,
+                "body": a.body,
+                "created_at": a.created_at.isoformat(),
+            }
+            for a in items
+        ],
+        headers={"Cache-Control": "public, max-age=300"},
+    )
 
 
 # ── Policy documents (employee read) ─────────────────────────────────────
@@ -484,17 +489,20 @@ def get_portal_policy_documents(
         .order_by(PolicyDocument.uploaded_at.desc())
         .all()
     )
-    return [
-        {
-            "id": d.id,
-            "title": d.title,
-            "description": d.description,
-            "file_name": d.file_name,
-            "file_size": d.file_size,
-            "uploaded_at": d.uploaded_at.isoformat(),
-        }
-        for d in docs
-    ]
+    return JSONResponse(
+        content=[
+            {
+                "id": d.id,
+                "title": d.title,
+                "description": d.description,
+                "file_name": d.file_name,
+                "file_size": d.file_size,
+                "uploaded_at": d.uploaded_at.isoformat(),
+            }
+            for d in docs
+        ],
+        headers={"Cache-Control": "public, max-age=600"},
+    )
 
 
 @router.get("/policy-documents/{doc_id}/download")

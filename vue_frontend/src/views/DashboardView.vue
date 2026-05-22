@@ -13,10 +13,7 @@
     </div>
 
     <!-- Loading -->
-    <div v-if="loading" class="loading-row">
-      <div class="spinner"></div>
-      <span>Loading dashboard…</span>
-    </div>
+    <SkeletonDashboard v-if="loading" />
 
     <template v-else>
       <!-- Stat cards -->
@@ -231,9 +228,11 @@
 import { ref, computed, onMounted } from 'vue'
 import axios from 'axios'
 import { useAuthStore } from '../stores/auth'
+import SkeletonDashboard from '../components/ui/SkeletonDashboard.vue'
 
 export default {
   name: 'DashboardView',
+  components: { SkeletonDashboard },
   setup() {
     const auth = useAuthStore()
     const stats = ref({})

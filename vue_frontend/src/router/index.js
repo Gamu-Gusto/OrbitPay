@@ -7,7 +7,7 @@ import axios from 'axios'
 import { useAuthStore } from '../stores/auth'
 
 // Routes that employee-only users are allowed to access
-const EMPLOYEE_ALLOWED = ['/portal', '/leave', '/change-password']
+const EMPLOYEE_ALLOWED = ['/portal', '/leave', '/change-password', '/forbidden']
 
 const router = createRouter({
   history: createWebHistory(),
@@ -145,6 +145,11 @@ const router = createRouter({
       path: '/activate',
       name: 'activate',
       component: () => import('../views/ActivateView.vue'),
+    },
+    {
+      path: '/forbidden',
+      name: 'forbidden',
+      component: () => import('../views/ForbiddenView.vue'),
     }
   ]
 })
@@ -196,7 +201,8 @@ router.beforeEach(async (to, from, next) => {
   // Enforce permission-gated routes
   const requiredPermission = to.meta?.permission
   if (requiredPermission && !auth.hasPermission(requiredPermission)) {
-    next(isEmployeeOnly ? '/portal' : '/')
+    // User is authenticated but lacks the required permission
+    next('/forbidden')
     return
   }
 

@@ -32,8 +32,11 @@
       </button>
     </div>
 
+    <!-- Loading skeleton -->
+    <SkeletonTable v-if="loading" :rows="6" :cols="5" />
+
     <!-- Employee table -->
-    <div class="card" style="padding:0; overflow:hidden;">
+    <div v-else class="card" style="padding:0; overflow:hidden;">
       <table class="data-table">
         <thead>
           <tr>
@@ -538,6 +541,7 @@ import axios from 'axios'
 import { useAuthStore } from '../stores/auth'
 import { useToastStore } from '../stores/toast'
 import { useRoute } from 'vue-router'
+import SkeletonTable from '../components/ui/SkeletonTable.vue'
 
 const ALL_TABS = [
   { id: 'personal',     label: 'Personal Info' },
@@ -549,6 +553,7 @@ const ALL_TABS = [
 
 export default {
   name: 'EmployeesView',
+  components: { SkeletonTable },
   setup() {
     const route      = useRoute()
     const auth       = useAuthStore()
@@ -558,6 +563,7 @@ export default {
     const employees   = ref([])
     const companyName = ref('')
     const companyObj  = ref(null)
+    const loading     = ref(false)
     const showDrawer  = ref(false)
     const editing     = ref(null)
     const activeTab   = ref('personal')
@@ -595,13 +601,18 @@ export default {
     const authHeader = () => ({ headers: { Authorization: `Bearer ${auth.accessToken}` } })
 
     const load = async () => {
-      const [emps, company] = await Promise.all([
-        axios.get(`/companies/${companyId}/employees`, { ...authHeader(), params: { include_inactive: true } }),
-        axios.get(`/companies/${companyId}`, authHeader())
-      ])
-      employees.value   = emps.data
-      companyObj.value  = company.data
-      companyName.value = company.data.name
+      loading.value = true
+      try {
+        const [emps, company] = await Promise.all([
+          axios.get(`/companies/${companyId}/employees`, { ...authHeader(), params: { include_inactive: true } }),
+          axios.get(`/companies/${companyId}`, authHeader())
+        ])
+        employees.value   = emps.data
+        companyObj.value  = company.data
+        companyName.value = company.data.name
+      } finally {
+        loading.value = false
+      }
     }
 
     const resetForm = () => {
@@ -901,7 +912,7 @@ export default {
     onMounted(load)
 
     return {
-      TABS, companyId, employees, companyName,
+      TABS, companyId, employees, companyName, loading,
       showDrawer, editing, form, creds, activeTab, saving, calculating,
       viewMode, activeEmployees, archivedEmployees, visibleEmployees, setView,
       openCreate, openEdit, close, save,
