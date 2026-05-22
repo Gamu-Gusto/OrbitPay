@@ -140,7 +140,7 @@
           v-if="auth.hasPermission('MANAGE_ANNOUNCEMENTS')"
           to="/admin/announcements"
           class="nav-link"
-          :class="{ 'is-active': route.path === '/admin/announcements' }"
+          :class="{ 'is-active': isAnnouncements }"
           @click="$emit('close')"
           data-label="Announcements"
         >
@@ -391,10 +391,11 @@ export default {
       return current === tab
     }
 
+    const isAnnouncements = computed(() => route.path === '/admin/announcements')
+
     const unreadAnnCount = computed(() => {
       try {
         const read = new Set(JSON.parse(localStorage.getItem('orbp_read_ann') || '[]'))
-        // We don't have the full list here; return 0 unless we detect any unread from route change
         return 0
       } catch { return 0 }
     })
@@ -509,7 +510,7 @@ export default {
       auth, isEmployeeOnly,
       isDashboard, isPayroll, isBulk, isCompanies, isHR, isAdmin, isUsers,
       isAudit, isReports, isPortal, isLeave, isCompliance, isLeaveApprovals, isDocApprovals, isBankApprovals,
-      isPortalTab, unreadAnnCount,
+      isPortalTab, isAnnouncements, unreadAnnCount,
       pendingCounts,
       unreadCount, notifications, showNotifDropdown, notifWrapRef,
       toggleNotifDropdown, markAllRead, handleNotifClick, fmtTime,
