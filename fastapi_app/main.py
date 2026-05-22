@@ -26,6 +26,8 @@ from routers.audit_log import router as audit_log_router
 from routers.self_service import router as self_service_router
 from routers.setup import router as setup_router
 from routers.notifications import router as notifications_router
+from routers.portal import router as portal_router
+from routers.announcements import router as announcements_router
 from hr_reports import router as hr_reports_router
 
 
@@ -55,6 +57,17 @@ def run_migrations():
             ("employees",       "bank_account_last4",                   "TEXT"),
             ("employees",       "pension_fund_name",                    "TEXT"),
             ("employees",       "medical_aid_scheme_name",              "TEXT"),
+            ("employees",       "phone",                                "TEXT"),
+            ("employees",       "personal_email",                       "TEXT"),
+            ("employees",       "address_street",                       "TEXT"),
+            ("employees",       "address_city",                         "TEXT"),
+            ("employees",       "address_province",                     "TEXT"),
+            ("employees",       "address_postal_code",                  "TEXT"),
+            ("employees",       "date_of_birth",                        "DATE"),
+            ("employees",       "profile_picture_data",                 "TEXT"),
+            ("employees",       "department",                           "TEXT"),
+            ("employees",       "reporting_manager",                    "TEXT"),
+            ("employees",       "employment_type",                      "TEXT"),
             ("leave_requests",  "reviewed_by",                          "INTEGER"),
             ("leave_requests",  "reviewed_at",                          "TIMESTAMP"),
             ("leave_requests",  "review_note",                          "TEXT"),
@@ -164,6 +177,8 @@ app.include_router(audit_log_router)
 app.include_router(self_service_router)
 app.include_router(setup_router)
 app.include_router(notifications_router)
+app.include_router(portal_router)
+app.include_router(announcements_router)
 app.include_router(hr_reports_router, prefix="/api", tags=["hr-reports"])
 
 

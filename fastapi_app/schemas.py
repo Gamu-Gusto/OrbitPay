@@ -401,6 +401,94 @@ class UserUpdateRequest(BaseModel):
     password: Optional[str] = Field(None, min_length=8, max_length=64)
 
 
+# ------------------ Portal / Employee Self-Service ------------------
+class EmergencyContactCreate(BaseModel):
+    full_name: str
+    relationship: str
+    phone: str
+    email: Optional[EmailStr] = None
+    is_primary: bool = False
+
+
+class EmergencyContactUpdate(BaseModel):
+    full_name: Optional[str] = None
+    relationship: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[EmailStr] = None
+    is_primary: Optional[bool] = None
+
+
+class EmergencyContactRead(BaseModel):
+    id: int
+    employee_id: int
+    full_name: str
+    relationship: str
+    phone: str
+    email: Optional[str] = None
+    is_primary: bool
+
+    class Config:
+        from_attributes = True
+
+
+class EmployeeProfileUpdate(BaseModel):
+    first_names: Optional[str] = None
+    last_name: Optional[str] = None
+    phone: Optional[str] = None
+    personal_email: Optional[EmailStr] = None
+    address_street: Optional[str] = None
+    address_city: Optional[str] = None
+    address_province: Optional[str] = None
+    address_postal_code: Optional[str] = None
+    tax_number: Optional[str] = None
+    tax_ref: Optional[str] = None
+
+
+class AnnouncementCreate(BaseModel):
+    company_id: int
+    title: str
+    body: str
+    is_active: bool = True
+
+
+class AnnouncementUpdate(BaseModel):
+    title: Optional[str] = None
+    body: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class AnnouncementRead(BaseModel):
+    id: int
+    company_id: int
+    title: str
+    body: str
+    is_active: bool
+    created_at: str
+
+    class Config:
+        from_attributes = True
+
+
+class EmployeeTaskCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    due_date: Optional[date] = None
+
+
+class EmployeeTaskRead(BaseModel):
+    id: int
+    employee_id: int
+    title: str
+    description: Optional[str] = None
+    due_date: Optional[date] = None
+    is_complete: bool
+    completed_at: Optional[str] = None
+    created_at: str
+
+    class Config:
+        from_attributes = True
+
+
 # ------------------ Notifications ------------------
 class NotificationRead(BaseModel):
     id: int

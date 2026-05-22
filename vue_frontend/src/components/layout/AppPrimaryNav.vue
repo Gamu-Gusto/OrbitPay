@@ -20,12 +20,28 @@
       <template v-if="isEmployeeOnly">
         <span class="nav-section-label">My Workspace</span>
 
-        <router-link to="/portal" class="nav-link" :class="{ 'is-active': isPortal }" @click="$emit('close')" data-label="Dashboard">
+        <router-link :to="{ path: '/portal', query: {} }" class="nav-link" :class="{ 'is-active': isPortalTab('dashboard') }" @click="$emit('close')" data-label="Dashboard">
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
             <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
             <rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>
           </svg>
           <span>Dashboard</span>
+        </router-link>
+
+        <router-link :to="{ path: '/portal', query: { tab: 'profile' } }" class="nav-link" :class="{ 'is-active': isPortalTab('profile') }" @click="$emit('close')" data-label="My Profile">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
+            <circle cx="12" cy="7" r="4"/>
+          </svg>
+          <span>My Profile</span>
+        </router-link>
+
+        <router-link :to="{ path: '/portal', query: { tab: 'payslips' } }" class="nav-link" :class="{ 'is-active': isPortalTab('payslips') }" @click="$emit('close')" data-label="My Payslips">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <rect x="2" y="3" width="20" height="18" rx="2"/>
+            <line x1="8" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="13" y2="14"/>
+          </svg>
+          <span>My Payslips</span>
         </router-link>
 
         <router-link to="/leave" class="nav-link" :class="{ 'is-active': isLeave }" @click="$emit('close')" data-label="My Leave">
@@ -35,6 +51,32 @@
             <path d="M8 14l2 2 4-4"/>
           </svg>
           <span>My Leave</span>
+        </router-link>
+
+        <router-link :to="{ path: '/portal', query: { tab: 'documents' } }" class="nav-link" :class="{ 'is-active': isPortalTab('documents') }" @click="$emit('close')" data-label="My Documents">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+          </svg>
+          <span>My Documents</span>
+        </router-link>
+
+        <router-link :to="{ path: '/portal', query: { tab: 'requests' } }" class="nav-link" :class="{ 'is-active': isPortalTab('requests') }" @click="$emit('close')" data-label="My Requests">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          <span>My Requests</span>
+        </router-link>
+
+        <span class="nav-section-label" style="margin-top:8px">Company</span>
+
+        <router-link :to="{ path: '/portal', query: { tab: 'announcements' } }" class="nav-link" :class="{ 'is-active': isPortalTab('announcements') }" @click="$emit('close')" data-label="Announcements">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+            <path d="M13.73 21a2 2 0 01-3.46 0"/>
+          </svg>
+          <span>Announcements</span>
+          <span v-if="unreadAnnCount > 0" class="nav-badge">{{ unreadAnnCount }}</span>
         </router-link>
       </template>
 
@@ -92,6 +134,21 @@
             <path d="M17 19V9a2 2 0 00-2-2h-2"/>
           </svg>
           <span>HR Reports</span>
+        </router-link>
+
+        <router-link
+          v-if="auth.hasPermission('MANAGE_ANNOUNCEMENTS')"
+          to="/admin/announcements"
+          class="nav-link"
+          :class="{ 'is-active': route.path === '/admin/announcements' }"
+          @click="$emit('close')"
+          data-label="Announcements"
+        >
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+            <path d="M13.73 21a2 2 0 01-3.46 0"/>
+          </svg>
+          <span>Announcements</span>
         </router-link>
 
         <router-link
@@ -328,6 +385,20 @@ export default {
     const isDocApprovals   = computed(() => route.path === '/approvals/documents')
     const isBankApprovals  = computed(() => route.path === '/approvals/banking')
 
+    const isPortalTab = (tab) => {
+      if (route.path !== '/portal') return false
+      const current = route.query.tab || 'dashboard'
+      return current === tab
+    }
+
+    const unreadAnnCount = computed(() => {
+      try {
+        const read = new Set(JSON.parse(localStorage.getItem('orbp_read_ann') || '[]'))
+        // We don't have the full list here; return 0 unless we detect any unread from route change
+        return 0
+      } catch { return 0 }
+    })
+
     const pendingCounts = reactive({ leave: 0, documents: 0, banking: 0 })
 
     const fetchPendingCounts = async () => {
@@ -438,6 +509,7 @@ export default {
       auth, isEmployeeOnly,
       isDashboard, isPayroll, isBulk, isCompanies, isHR, isAdmin, isUsers,
       isAudit, isReports, isPortal, isLeave, isCompliance, isLeaveApprovals, isDocApprovals, isBankApprovals,
+      isPortalTab, unreadAnnCount,
       pendingCounts,
       unreadCount, notifications, showNotifDropdown, notifWrapRef,
       toggleNotifDropdown, markAllRead, handleNotifClick, fmtTime,

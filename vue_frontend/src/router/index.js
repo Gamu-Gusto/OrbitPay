@@ -131,6 +131,12 @@ const router = createRouter({
       meta: { requiresAuth: true, permission: 'CREATE_USER' }
     },
     {
+      path: '/admin/announcements',
+      name: 'announcements',
+      component: () => import('../views/AnnouncementsView.vue'),
+      meta: { requiresAuth: true, permission: 'MANAGE_ANNOUNCEMENTS' }
+    },
+    {
       path: '/admin/setup',
       name: 'adminSetup',
       component: () => import('../views/AdminSetupView.vue'),

@@ -30,6 +30,9 @@ ROLE_PERMISSIONS: dict[str, List[str]] = {
         "VIEW_ALL_REPORTS",
         "CREATE_USER",
         "DEACTIVATE_USER",
+        "MANAGE_ANNOUNCEMENTS",
+        "MANAGE_POLICY_DOCUMENTS",
+        "MANAGE_TASKS",
     ],
     "accountant": [
         "MANAGE_COMPANIES",
@@ -48,6 +51,7 @@ ROLE_PERMISSIONS: dict[str, List[str]] = {
         "VIEW_BANKING",
         "VIEW_HR_REPORTS",
         "VIEW_AUDIT_LOGS",
+        "MANAGE_ANNOUNCEMENTS",
     ],
     "employee": [
         "VIEW_OWN_PAYSLIPS",

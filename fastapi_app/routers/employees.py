@@ -15,12 +15,13 @@ from core.tenant import get_company
 from db import get_db
 from models import CompanyDetails, EmployeeDetails, PayslipData
 from orm_models import (
-    Company, Employee, EmployeeDocument, EmployeeUser,
+    Company, Employee, EmployeeDocument, EmployeeTask, EmployeeUser,
     Role, User, UserCompany, UserRole,
 )
 from schemas import (
     EmployeeCreateWithCredentials, EmployeeImportResult,
     EmployeeRead, EmployeeUserInfo, EmployeeUpdateWithCredentials,
+    EmployeeTaskCreate, EmployeeTaskRead,
 )
 from utils import calculate_sdl, monthly_paye_from_gross, uif_employee
 
@@ -417,3 +418,69 @@ def import_employees(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Import failed: {str(e)}")
     return EmployeeImportResult(created=created, failed=len(errors), errors=errors)
+
+
+# ── Employee tasks (admin-managed) ────────────────────────────────────────
+
+@router.post("/employees/{employee_id}/tasks", response_model=EmployeeTaskRead)
+def create_employee_task(
+    employee_id: int,
+    body: EmployeeTaskCreate,
+    user: User = Depends(require_permission("MANAGE_TASKS")),
+    db: Session = Depends(get_db),
+):
+    employee = db.get(Employee, employee_id)
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    get_company(employee.company_id, db, user)
+    from datetime import datetime as _dt
+    task = EmployeeTask(
+        employee_id=employee_id,
+        title=body.title,
+        description=body.description,
+        due_date=body.due_date,
+        created_by=user.id,
+    )
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+    return EmployeeTaskRead(
+        id=task.id,
+        employee_id=task.employee_id,
+        title=task.title,
+        description=task.description,
+        due_date=task.due_date,
+        is_complete=task.is_complete,
+        completed_at=task.completed_at.isoformat() if task.completed_at else None,
+        created_at=task.created_at.isoformat(),
+    )
+
+
+@router.get("/employees/{employee_id}/tasks")
+def list_employee_tasks(
+    employee_id: int,
+    user: User = Depends(require_permission("MANAGE_TASKS")),
+    db: Session = Depends(get_db),
+):
+    employee = db.get(Employee, employee_id)
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    get_company(employee.company_id, db, user)
+    tasks = (
+        db.query(EmployeeTask)
+        .filter(EmployeeTask.employee_id == employee_id)
+        .order_by(EmployeeTask.is_complete.asc(), EmployeeTask.created_at.asc())
+        .all()
+    )
+    return [
+        {
+            "id": t.id,
+            "title": t.title,
+            "description": t.description,
+            "due_date": t.due_date.isoformat() if t.due_date else None,
+            "is_complete": t.is_complete,
+            "completed_at": t.completed_at.isoformat() if t.completed_at else None,
+            "created_at": t.created_at.isoformat(),
+        }
+        for t in tasks
+    ]

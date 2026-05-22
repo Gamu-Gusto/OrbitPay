@@ -73,6 +73,19 @@ class Employee(Base):
     pension_fund_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     medical_aid_scheme_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
+    # Extended profile fields (self-service editable)
+    phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    personal_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    address_street: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    address_city: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    address_province: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    address_postal_code: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    date_of_birth: Mapped[Date | None] = mapped_column(Date, nullable=True)
+    profile_picture_data: Mapped[str | None] = mapped_column(Text, nullable=True)  # base64 JPEG/PNG
+    department: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    reporting_manager: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    employment_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
     company = relationship("Company", back_populates="employees")
     payroll_records = relationship("PayrollRecord", back_populates="employee", cascade="all, delete-orphan")
     leave_balances = relationship("LeaveBalance", back_populates="employee", cascade="all, delete-orphan")
@@ -351,4 +364,57 @@ class Notification(Base):
     entity_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     is_read: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+
+
+class EmergencyContact(Base):
+    __tablename__ = "emergency_contacts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    employee_id: Mapped[int] = mapped_column(ForeignKey("employees.id", ondelete="CASCADE"), index=True)
+    full_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    relationship: Mapped[str] = mapped_column(String(100), nullable=False)
+    phone: Mapped[str] = mapped_column(String(50), nullable=False)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    is_primary: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class Announcement(Base):
+    __tablename__ = "announcements"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"), index=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class PolicyDocument(Base):
+    __tablename__ = "policy_documents"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"), index=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    file_data: Mapped[str] = mapped_column(Text, nullable=False)  # base64
+    file_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    file_size: Mapped[int] = mapped_column(Integer, default=0)
+    uploaded_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class EmployeeTask(Base):
+    __tablename__ = "employee_tasks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    employee_id: Mapped[int] = mapped_column(ForeignKey("employees.id", ondelete="CASCADE"), index=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    due_date: Mapped[Date | None] = mapped_column(Date, nullable=True)
+    is_complete: Mapped[bool] = mapped_column(Boolean, default=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 

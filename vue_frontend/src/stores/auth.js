@@ -32,6 +32,7 @@ export const useAuthStore = defineStore('auth', {
           'ASSIGN_ACCOUNTANTS', 'MANAGE_ASSIGNMENTS',
           'VIEW_AUDIT_LOGS', 'VIEW_ALL_REPORTS',
           'CREATE_USER', 'DEACTIVATE_USER',
+          'MANAGE_ANNOUNCEMENTS', 'MANAGE_POLICY_DOCUMENTS', 'MANAGE_TASKS',
         ],
         accountant: [
           'MANAGE_COMPANIES', 'VIEW_COMPANIES',
@@ -40,6 +41,7 @@ export const useAuthStore = defineStore('auth', {
           'VIEW_LEAVE_REQUESTS', 'MANAGE_LEAVE_BALANCES',
           'VIEW_DOCUMENTS', 'VIEW_BANKING',
           'VIEW_HR_REPORTS', 'VIEW_AUDIT_LOGS',
+          'MANAGE_ANNOUNCEMENTS',
         ],
         employee: [
           'VIEW_OWN_PAYSLIPS', 'VIEW_OWN_LEAVE', 'APPLY_LEAVE',
