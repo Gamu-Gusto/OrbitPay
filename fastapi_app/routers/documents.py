@@ -1,8 +1,9 @@
 import base64
 import io
 from datetime import datetime
+from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy import insert
 from sqlalchemy.orm import Session
@@ -144,6 +145,48 @@ def download_my_document(doc_id: int, user: User = Depends(get_current_user), db
     )
 
 
+@router.get("/documents")
+def get_all_documents(
+    status: Optional[str] = Query(None, description="Filter by status: pending, approved, rejected"),
+    user: User = Depends(require_permission("REVIEW_DOCUMENTS")),
+    db: Session = Depends(get_db),
+):
+    roles = getattr(user, "role_names", [])
+    is_super_admin = "super_admin" in roles
+
+    query = db.query(EmployeeDocument)
+    if status in ("pending", "approved", "rejected"):
+        query = query.filter(EmployeeDocument.status == status)
+    docs = query.order_by(EmployeeDocument.uploaded_at.desc()).all()
+
+    result = []
+    for d in docs:
+        emp = db.get(Employee, d.employee_id)
+        company = db.get(Company, emp.company_id) if emp else None
+
+        if not is_super_admin and emp:
+            assigned = db.query(AccountantAssignment).filter_by(
+                accountant_user_id=user.id, company_id=emp.company_id
+            ).first()
+            if not assigned:
+                continue
+
+        result.append({
+            "id": d.id,
+            "employee_id": d.employee_id,
+            "employee_name": f"{emp.first_names} {emp.last_name}" if emp else f"Employee #{d.employee_id}",
+            "company_name": company.name if company else "—",
+            "document_type": d.document_type,
+            "description": d.description,
+            "file_name": d.file_name,
+            "file_size": d.file_size,
+            "uploaded_at": d.uploaded_at.isoformat(),
+            "status": d.status,
+            "rejection_reason": d.rejection_reason,
+        })
+    return result
+
+
 @router.get("/documents/pending")
 def get_pending_documents(
     user: User = Depends(require_permission("REVIEW_DOCUMENTS")),
@@ -181,9 +224,20 @@ def get_pending_documents(
     return result
 
 
+_MIME_BY_EXT = {
+    "pdf": "application/pdf",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "png": "image/png",
+    "doc": "application/msword",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+}
+
+
 @router.get("/documents/{doc_id}/download")
 def download_document_admin(
     doc_id: int,
+    inline: bool = Query(False, description="Serve inline for in-browser preview"),
     user: User = Depends(require_permission("REVIEW_DOCUMENTS")),
     db: Session = Depends(get_db),
 ):
@@ -191,9 +245,12 @@ def download_document_admin(
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     raw = base64.b64decode(doc.file_data)
+    ext = doc.file_name.rsplit(".", 1)[-1].lower() if "." in doc.file_name else ""
+    mime = _MIME_BY_EXT.get(ext, "application/octet-stream")
+    disposition = "inline" if inline else f'attachment; filename="{doc.file_name}"'
     return StreamingResponse(
-        io.BytesIO(raw), media_type="application/octet-stream",
-        headers={"Content-Disposition": f'attachment; filename="{doc.file_name}"'},
+        io.BytesIO(raw), media_type=mime,
+        headers={"Content-Disposition": disposition},
     )
 
 
