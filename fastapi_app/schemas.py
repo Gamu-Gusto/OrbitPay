@@ -395,34 +395,6 @@ class AdminSetupRequest(BaseModel):
     confirm_password: str
 
 
-# ------------------ Accountant Registration ------------------
-class AccountantRegistrationCreate(BaseModel):
-    full_name: str
-    email: EmailStr
-    password: str = Field(..., min_length=8, max_length=64)
-    firm_name: Optional[str] = None
-    phone: Optional[str] = None
-
-
-class AccountantRegistrationRead(BaseModel):
-    id: int
-    full_name: str
-    email: str
-    firm_name: Optional[str] = None
-    phone: Optional[str] = None
-    status: str
-    rejection_reason: Optional[str] = None
-    requested_at: str
-
-    class Config:
-        from_attributes = True
-
-
-class AccountantRegistrationReview(BaseModel):
-    status: str  # "approved" | "rejected"
-    reason: Optional[str] = None
-
-
 # ------------------ User Credentials Update ------------------
 class UserUpdateRequest(BaseModel):
     email: Optional[EmailStr] = None

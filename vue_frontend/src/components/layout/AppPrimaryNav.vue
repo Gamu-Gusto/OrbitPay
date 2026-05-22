@@ -110,23 +110,6 @@
 
         <router-link
           v-if="auth.hasPermission('CREATE_USER')"
-          to="/admin/registrations"
-          class="nav-link"
-          :class="{ 'is-active': isRegistrations }"
-          @click="$emit('close')"
-          data-label="Registrations"
-        >
-          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-            <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
-            <circle cx="9" cy="7" r="4"/>
-            <polyline points="16 11 18 13 22 9"/>
-          </svg>
-          <span>Registrations</span>
-          <span v-if="pendingCounts.registrations > 0" class="nav-badge">{{ pendingCounts.registrations }}</span>
-        </router-link>
-
-        <router-link
-          v-if="auth.hasPermission('CREATE_USER')"
           to="/admin/users"
           class="nav-link"
           :class="{ 'is-active': isUsers }"
@@ -335,7 +318,6 @@ export default {
     const isCompanies      = computed(() => route.path.startsWith('/companies'))
     const isHR             = computed(() => route.path.startsWith('/hr-reports'))
     const isAdmin          = computed(() => route.path === '/admin/assignments')
-    const isRegistrations  = computed(() => route.path === '/admin/registrations')
     const isUsers          = computed(() => route.path === '/admin/users')
     const isAudit          = computed(() => route.path === '/audit')
     const isReports        = computed(() => route.path === '/reports')
@@ -346,16 +328,15 @@ export default {
     const isDocApprovals   = computed(() => route.path === '/approvals/documents')
     const isBankApprovals  = computed(() => route.path === '/approvals/banking')
 
-    const pendingCounts = reactive({ leave: 0, documents: 0, banking: 0, registrations: 0 })
+    const pendingCounts = reactive({ leave: 0, documents: 0, banking: 0 })
 
     const fetchPendingCounts = async () => {
       if (!auth.hasPermission('APPROVE_LEAVE') && !auth.hasPermission('CREATE_USER')) return
       try {
         const { data } = await axios.get('/dashboard/stats')
-        pendingCounts.leave          = data.pending_leave          || 0
-        pendingCounts.documents      = data.pending_documents      || 0
-        pendingCounts.banking        = data.pending_banking        || 0
-        pendingCounts.registrations  = data.pending_registrations  || 0
+        pendingCounts.leave     = data.pending_leave     || 0
+        pendingCounts.documents = data.pending_documents || 0
+        pendingCounts.banking   = data.pending_banking   || 0
       } catch {}
     }
 
@@ -455,7 +436,7 @@ export default {
 
     return {
       auth, isEmployeeOnly,
-      isDashboard, isPayroll, isBulk, isCompanies, isHR, isAdmin, isRegistrations, isUsers,
+      isDashboard, isPayroll, isBulk, isCompanies, isHR, isAdmin, isUsers,
       isAudit, isReports, isPortal, isLeave, isCompliance, isLeaveApprovals, isDocApprovals, isBankApprovals,
       pendingCounts,
       unreadCount, notifications, showNotifDropdown, notifWrapRef,

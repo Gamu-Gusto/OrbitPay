@@ -12,7 +12,6 @@ from core.tenant import get_company
 from db import get_db
 from orm_models import (
     AccountantAssignment,
-    AccountantRegistrationRequest,
     AuditEvent,
     BankingChangeRequest,
     Company,
@@ -94,14 +93,10 @@ def get_dashboard_stats(user: User = Depends(get_current_user), db: Session = De
     pending_leave = 0
     pending_documents = 0
     pending_banking = 0
-    pending_registrations = 0
     if "super_admin" in roles:
         pending_leave = db.query(LeaveRequest).filter(LeaveRequest.status == "pending").count()
         pending_documents = db.query(EmployeeDocument).filter(EmployeeDocument.status == "pending").count()
         pending_banking = db.query(BankingChangeRequest).filter(BankingChangeRequest.status == "pending").count()
-        pending_registrations = db.query(AccountantRegistrationRequest).filter(
-            AccountantRegistrationRequest.status == "pending"
-        ).count()
 
     return {
         "companies": len(company_ids),
@@ -116,7 +111,6 @@ def get_dashboard_stats(user: User = Depends(get_current_user), db: Session = De
         "pending_leave": pending_leave,
         "pending_documents": pending_documents,
         "pending_banking": pending_banking,
-        "pending_registrations": pending_registrations,
         "alerts": alerts[:15],
         "recent_activity": recent_activity,
     }

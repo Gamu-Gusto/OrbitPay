@@ -24,7 +24,6 @@ from routers.banking import router as banking_router
 from routers.reports import router as reports_router
 from routers.audit_log import router as audit_log_router
 from routers.self_service import router as self_service_router
-from routers.registrations import router as registrations_router
 from routers.setup import router as setup_router
 from routers.notifications import router as notifications_router
 from hr_reports import router as hr_reports_router
@@ -163,7 +162,6 @@ app.include_router(banking_router)
 app.include_router(reports_router)
 app.include_router(audit_log_router)
 app.include_router(self_service_router)
-app.include_router(registrations_router)
 app.include_router(setup_router)
 app.include_router(notifications_router)
 app.include_router(hr_reports_router, prefix="/api", tags=["hr-reports"])
