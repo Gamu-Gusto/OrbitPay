@@ -147,7 +147,7 @@
 <script>
 import { ref, computed, onMounted } from 'vue'
 import axios from 'axios'
-import SkeletonTable from '@/components/ui/SkeletonTable.vue'
+import SkeletonTable from '../components/ui/SkeletonTable.vue'
 
 const TABS = [
   { key: 'pending',  label: 'Pending Review' },
