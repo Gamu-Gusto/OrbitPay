@@ -279,6 +279,16 @@
                   </svg>
                   {{ isGeneratingPDF ? 'Generating...' : 'Generate Payslip PDF' }}
                 </button>
+                <template v-if="calculatedData?.record_id">
+                  <div v-if="distributeStatus === 'distributed'" class="distribute-badge">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                    Distributed to portal
+                  </div>
+                  <button v-else @click="distributeOne" :disabled="distributing" class="btn-secondary w-full">
+                    {{ distributing ? 'Distributing…' : 'Distribute to Employee Portal' }}
+                  </button>
+                  <p v-if="distributeError" class="distribute-warn">{{ distributeError }}</p>
+                </template>
               </div>
             </div>
           </div>
@@ -575,6 +585,8 @@ export default {
 
     const calculatePayroll = async () => {
       isCalculating.value = true
+      distributeStatus.value = ''
+      distributeError.value = ''
       try {
         let response
         if (isReverseMode.value) {
@@ -676,6 +688,25 @@ export default {
       }
     }
 
+    const distributing = ref(false)
+    const distributeStatus = ref('')
+    const distributeError = ref('')
+
+    const distributeOne = async () => {
+      if (!calculatedData.value?.record_id) return
+      distributing.value = true
+      distributeError.value = ''
+      try {
+        await axios.post(`/payroll-records/${calculatedData.value.record_id}/distribute`)
+        distributeStatus.value = 'distributed'
+      } catch (e) {
+        const detail = e?.response?.data?.detail || 'Distribution failed.'
+        distributeError.value = detail
+      } finally {
+        distributing.value = false
+      }
+    }
+
     onMounted(() => {
       loadCompanies()
     })
@@ -704,7 +735,8 @@ export default {
       formatCurrency,
       formatDate,
       calculatePayroll,
-      generatePayslip
+      generatePayslip,
+      distributing, distributeStatus, distributeError, distributeOne,
     }
   }
 }
@@ -977,6 +1009,17 @@ export default {
 .approval-row {
   display: flex;
   gap: 8px;
+}
+
+.distribute-badge {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 12px;
+  background: #dcfce7; border: 1px solid #86efac; border-radius: 7px;
+  font-size: 12.5px; font-weight: 600; color: #15803d;
+}
+
+.distribute-warn {
+  font-size: 12px; color: #dc2626; margin: 0;
 }
 
 .summary-tab-content {

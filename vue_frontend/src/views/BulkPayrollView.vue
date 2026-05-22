@@ -106,6 +106,14 @@
         <span v-if="emailError" class="email-status warn">{{ emailError }}</span>
       </div>
 
+      <!-- Distribute to employee portals -->
+      <div class="email-row" v-if="result.successful > 0 && periodStatus === 'approved'">
+        <button @click="distributeAll" :disabled="distributing" class="btn-secondary">
+          {{ distributing ? distributeProgress : 'Distribute All Payslips to Portals' }}
+        </button>
+        <span v-if="distributeResult" class="email-status ok">{{ distributeResult }}</span>
+      </div>
+
       <!-- Employee breakdown table -->
       <h3 class="table-heading">Employee Breakdown — {{ result.period }}</h3>
       <div class="table-wrap">
@@ -310,6 +318,33 @@ export default {
       }
     }
 
+    // Distribute payslips to employee portals
+    const distributing = ref(false)
+    const distributeProgress = ref('')
+    const distributeResult = ref('')
+
+    const distributeAll = async () => {
+      if (!result.value?.employees) return
+      const records = result.value.employees.filter(e => e.status === 'success' && e.record_id)
+      if (!records.length) return
+      distributing.value = true
+      distributeResult.value = ''
+      let distributed = 0
+      let skipped = 0
+      for (let i = 0; i < records.length; i++) {
+        distributeProgress.value = `Distributing ${i + 1} of ${records.length}…`
+        try {
+          await axios.post(`/payroll-records/${records[i].record_id}/distribute`)
+          distributed++
+        } catch (e) {
+          const detail = e?.response?.data?.detail || ''
+          if (detail.toLowerCase().includes('no portal') || detail.toLowerCase().includes('no linked')) skipped++
+        }
+      }
+      distributing.value = false
+      distributeResult.value = `${distributed} distributed${skipped ? `, ${skipped} skipped (no portal account)` : ''}.`
+    }
+
     onMounted(loadCompanies)
 
     return {
@@ -317,7 +352,8 @@ export default {
       loading, sending, result, errorMsg, emailResult, emailError,
       periodStatus, approvalLoading, approvalMsg, approvalMsgType, showRejectInput, rejectReason,
       canSubmit, canApprove, periodStatusLabel, statusNote, statusBadgeClass,
-      fmt, runPayroll, sendPayslips, submitForApproval, approvePayroll, rejectPayroll, hasRole
+      distributing, distributeProgress, distributeResult,
+      fmt, runPayroll, sendPayslips, distributeAll, submitForApproval, approvePayroll, rejectPayroll, hasRole
     }
   }
 }

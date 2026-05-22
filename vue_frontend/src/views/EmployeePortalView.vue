@@ -15,21 +15,6 @@
       </div>
     </div>
 
-    <!-- Force password change banner -->
-    <div v-if="auth.forcePasswordChange && !dismissedPwBanner" class="pw-banner">
-      <svg class="pw-banner-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
-      </svg>
-      <div class="pw-banner-body">
-        <p class="pw-banner-title">Please change your password before continuing.</p>
-        <p class="pw-banner-sub">You are using a temporary password. Update it now to secure your account.</p>
-      </div>
-      <div class="pw-banner-actions">
-        <router-link to="/change-password" class="btn-primary btn-sm">Change password</router-link>
-        <button class="pw-banner-dismiss" @click="dismissedPwBanner = true" title="Dismiss">✕</button>
-      </div>
-    </div>
-
     <div v-if="loading" class="loading-state">
       <div class="spinner"></div>
       <span>Loading your portal…</span>
@@ -157,7 +142,7 @@
       <section class="section">
         <h2 class="section-title">My Payslips</h2>
         <div class="card">
-          <div v-if="payslips.length === 0" class="empty-state">No payslips found.</div>
+          <div v-if="payslips.length === 0" class="empty-state">No payslips have been shared with you yet.</div>
           <template v-else>
             <div class="table-wrap">
               <table class="data-table">
@@ -405,7 +390,6 @@ export default {
     const leaveRequests = ref([])
     const downloading = ref(null)
     const page = ref(0)
-    const dismissedPwBanner = ref(false)
     const pageSize = 10
 
     // Documents
@@ -626,7 +610,7 @@ export default {
     return {
       auth, loading, noProfile, profile, payslips, leaveBalances, leaveRequests,
       downloading, page, pageSize, totalPages, pagedPayslips,
-      companyName, avatarInitials, dismissedPwBanner,
+      companyName, avatarInitials,
       recentPayslips, pendingLeaveCount, pendingDocCount, pendingBankCount,
       allRequests,
       prevPage, nextPage,
@@ -933,27 +917,6 @@ export default {
   .banking-fields { flex-direction: column; gap: 6px; }
   .dashboard-row { grid-template-columns: 1fr; }
 }
-
-/* ── Force-password-change banner ─────────────────────────────────────── */
-.pw-banner {
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
-  background: #fffbeb;
-  border: 1px solid #f59e0b;
-  border-radius: 10px;
-  padding: 16px 20px;
-}
-.pw-banner-icon { width: 22px; height: 22px; color: #d97706; flex-shrink: 0; margin-top: 2px; }
-.pw-banner-body { flex: 1; min-width: 0; }
-.pw-banner-title { font-size: 13.5px; font-weight: 600; color: #92400e; margin: 0 0 2px; }
-.pw-banner-sub { font-size: 12px; color: #92400e; margin: 0; }
-.pw-banner-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
-.pw-banner-dismiss {
-  background: none; border: none; color: #92400e; cursor: pointer;
-  font-size: 14px; padding: 2px 4px; line-height: 1;
-}
-.pw-banner-dismiss:hover { color: #78350f; }
 
 /* ── Dashboard summary row ─────────────────────────────────────────────── */
 .dashboard-row {

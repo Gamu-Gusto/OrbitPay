@@ -125,6 +125,21 @@
           <span v-if="pendingCounts.registrations > 0" class="nav-badge">{{ pendingCounts.registrations }}</span>
         </router-link>
 
+        <router-link
+          v-if="auth.hasPermission('CREATE_USER')"
+          to="/admin/users"
+          class="nav-link"
+          :class="{ 'is-active': isUsers }"
+          @click="$emit('close')"
+          data-label="Users"
+        >
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/>
+            <line x1="19" y1="8" x2="19" y2="14"/><line x1="16" y1="11" x2="22" y2="11"/>
+          </svg>
+          <span>Users</span>
+        </router-link>
+
         <span v-if="auth.hasPermission('APPROVE_LEAVE')" class="nav-section-label" style="margin-top:8px">Approvals</span>
 
         <router-link
@@ -246,6 +261,35 @@
       </svg>
     </button>
 
+    <!-- Notification bell -->
+    <div class="notif-wrap" ref="notifWrapRef">
+      <button class="notif-btn" @click="toggleNotifDropdown" title="Notifications">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+          <path d="M13.73 21a2 2 0 01-3.46 0"/>
+        </svg>
+        <span v-if="unreadCount > 0" class="notif-badge">{{ unreadCount > 9 ? '9+' : unreadCount }}</span>
+      </button>
+      <div v-if="showNotifDropdown" class="notif-dropdown">
+        <div class="notif-dropdown-header">
+          <span class="notif-dropdown-title">Notifications</span>
+          <button v-if="notifications.length > 0" class="notif-mark-all" @click="markAllRead">Mark all read</button>
+        </div>
+        <div v-if="notifications.length === 0" class="notif-empty">No unread notifications.</div>
+        <div v-else class="notif-list">
+          <div
+            v-for="n in notifications"
+            :key="n.id"
+            class="notif-item"
+            @click="handleNotifClick(n)"
+          >
+            <p class="notif-msg">{{ n.message }}</p>
+            <p class="notif-time">{{ fmtTime(n.created_at) }}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- User footer -->
     <div class="sidebar-user">
       <div class="user-avatar">{{ initials }}</div>
@@ -264,8 +308,8 @@
 </template>
 
 <script>
-import { computed, reactive, onMounted, onUnmounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, reactive, ref, onMounted, onUnmounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../../stores/auth'
 import axios from 'axios'
 
@@ -277,8 +321,9 @@ export default {
   },
   emits: ['close', 'toggle-collapse'],
   setup() {
-    const route = useRoute()
-    const auth  = useAuthStore()
+    const route  = useRoute()
+    const router = useRouter()
+    const auth   = useAuthStore()
 
     const isEmployeeOnly = computed(() =>
       auth.roles.includes('employee') && !auth.roles.some(r => ['super_admin', 'accountant', 'manager'].includes(r))
@@ -291,6 +336,7 @@ export default {
     const isHR             = computed(() => route.path.startsWith('/hr-reports'))
     const isAdmin          = computed(() => route.path === '/admin/assignments')
     const isRegistrations  = computed(() => route.path === '/admin/registrations')
+    const isUsers          = computed(() => route.path === '/admin/users')
     const isAudit          = computed(() => route.path === '/audit')
     const isReports        = computed(() => route.path === '/reports')
     const isPortal         = computed(() => route.path === '/portal')
@@ -313,12 +359,79 @@ export default {
       } catch {}
     }
 
-    let interval = null
+    // Notifications
+    const unreadCount = ref(0)
+    const notifications = ref([])
+    const showNotifDropdown = ref(false)
+    const notifWrapRef = ref(null)
+
+    const fetchNotifCount = async () => {
+      try {
+        const { data } = await axios.get('/notifications/count')
+        unreadCount.value = data.unread_count || 0
+      } catch {}
+    }
+
+    const fetchNotifications = async () => {
+      try {
+        const { data } = await axios.get('/notifications')
+        notifications.value = data || []
+      } catch {}
+    }
+
+    const toggleNotifDropdown = async () => {
+      showNotifDropdown.value = !showNotifDropdown.value
+      if (showNotifDropdown.value) await fetchNotifications()
+    }
+
+    const markAllRead = async () => {
+      try {
+        await axios.patch('/notifications/read-all')
+        unreadCount.value = 0
+        notifications.value = []
+        showNotifDropdown.value = false
+      } catch {}
+    }
+
+    const handleNotifClick = async (n) => {
+      try { await axios.patch(`/notifications/${n.id}/read`) } catch {}
+      showNotifDropdown.value = false
+      if (n.entity_type === 'employee' && n.entity_id) {
+        router.push(`/employees/${n.entity_id}`)
+      } else if (n.entity_type === 'document' && n.entity_id) {
+        router.push('/approvals/documents')
+      }
+      await fetchNotifCount()
+    }
+
+    const onDocClick = (e) => {
+      if (notifWrapRef.value && !notifWrapRef.value.contains(e.target)) {
+        showNotifDropdown.value = false
+      }
+    }
+
+    const fmtTime = (iso) => {
+      if (!iso) return ''
+      try { return new Date(iso).toLocaleString('en-ZA', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) }
+      catch { return iso }
+    }
+
+    let pendingInterval = null
+    let notifInterval = null
+
     onMounted(() => {
       fetchPendingCounts()
-      interval = setInterval(fetchPendingCounts, 300000)
+      pendingInterval = setInterval(fetchPendingCounts, 300000)
+      fetchNotifCount()
+      notifInterval = setInterval(fetchNotifCount, 60000)
+      document.addEventListener('click', onDocClick)
     })
-    onUnmounted(() => clearInterval(interval))
+
+    onUnmounted(() => {
+      clearInterval(pendingInterval)
+      clearInterval(notifInterval)
+      document.removeEventListener('click', onDocClick)
+    })
 
     const initials = computed(() => {
       const u = auth.user
@@ -340,7 +453,15 @@ export default {
 
     const logout = () => { auth.logout() }
 
-    return { auth, isEmployeeOnly, isDashboard, isPayroll, isBulk, isCompanies, isHR, isAdmin, isRegistrations, isAudit, isReports, isPortal, isLeave, isCompliance, isLeaveApprovals, isDocApprovals, isBankApprovals, pendingCounts, initials, fullName, formattedRole, logout }
+    return {
+      auth, isEmployeeOnly,
+      isDashboard, isPayroll, isBulk, isCompanies, isHR, isAdmin, isRegistrations, isUsers,
+      isAudit, isReports, isPortal, isLeave, isCompliance, isLeaveApprovals, isDocApprovals, isBankApprovals,
+      pendingCounts,
+      unreadCount, notifications, showNotifDropdown, notifWrapRef,
+      toggleNotifDropdown, markAllRead, handleNotifClick, fmtTime,
+      initials, fullName, formattedRole, logout,
+    }
   }
 }
 </script>
@@ -610,6 +731,78 @@ export default {
   transition: background 0.12s, color 0.12s;
 }
 .logout-btn:hover { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.9); }
+
+/* ── Notification bell ───────────────────────────────────────────────────── */
+.notif-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 8px;
+  flex-shrink: 0;
+}
+
+.notif-btn {
+  position: relative;
+  width: 34px; height: 34px;
+  display: flex; align-items: center; justify-content: center;
+  background: none; border: none; border-radius: 8px;
+  color: rgba(255,255,255,0.55); cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+.notif-btn:hover { background: var(--color-bg-sidebar-hover); color: rgba(255,255,255,0.9); }
+
+.notif-badge {
+  position: absolute; top: 4px; right: 4px;
+  background: #ef4444; color: #fff;
+  font-size: 9px; font-weight: 700;
+  min-width: 16px; height: 16px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0 3px; pointer-events: none;
+}
+
+.notif-dropdown {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  width: 300px;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+  z-index: 300;
+  overflow: hidden;
+}
+
+.notif-dropdown-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.notif-dropdown-title { font-size: 12px; font-weight: 600; color: var(--color-text-base); }
+
+.notif-mark-all {
+  background: none; border: none; font-size: 11px;
+  color: var(--color-accent); cursor: pointer; padding: 0; font-family: inherit;
+}
+.notif-mark-all:hover { text-decoration: underline; }
+
+.notif-empty { padding: 16px 14px; font-size: 12.5px; color: var(--color-text-muted); }
+
+.notif-list { max-height: 280px; overflow-y: auto; }
+
+.notif-item {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--color-border);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.notif-item:last-child { border-bottom: none; }
+.notif-item:hover { background: var(--color-bg-page); }
+
+.notif-msg { font-size: 12.5px; color: var(--color-text-base); margin: 0 0 3px; line-height: 1.4; }
+.notif-time { font-size: 11px; color: var(--color-text-muted); margin: 0; }
 
 /* ── Mobile responsive ───────────────────────────────────────────────────── */
 @media (max-width: 768px) {

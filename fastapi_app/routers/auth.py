@@ -98,6 +98,7 @@ def login(request: Request, req: LoginRequest, db: Session = Depends(get_db)):
                 a.company_id
                 for a in db.query(AccountantAssignment).filter_by(accountant_user_id=user.id).all()
             ]
+        user.last_login = datetime.utcnow()
         token = create_access_token(str(user.id), roles, company_ids)
         raw_refresh, refresh_hash = create_refresh_token()
         db.add(RefreshToken(

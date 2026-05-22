@@ -26,6 +26,7 @@ from routers.audit_log import router as audit_log_router
 from routers.self_service import router as self_service_router
 from routers.registrations import router as registrations_router
 from routers.setup import router as setup_router
+from routers.notifications import router as notifications_router
 from hr_reports import router as hr_reports_router
 
 
@@ -49,6 +50,9 @@ def run_migrations():
             ("payroll_records", "approved_at",                          "TIMESTAMP"),
             ("payroll_records", "rejection_reason",                     "TEXT"),
             ("payroll_records", "other_earnings_description",           "TEXT"),
+            ("payroll_records", "distributed",                          "BOOLEAN DEFAULT FALSE"),
+            ("payroll_records", "distributed_at",                       "TIMESTAMP"),
+            ("payroll_records", "distributed_by",                       "INTEGER"),
             ("employees",       "bank_account_last4",                   "TEXT"),
             ("employees",       "pension_fund_name",                    "TEXT"),
             ("employees",       "medical_aid_scheme_name",              "TEXT"),
@@ -59,6 +63,7 @@ def run_migrations():
             ("audit_events",    "company_id",                           "INTEGER"),
             ("audit_events",    "ip_address",                           "TEXT"),
             ("users",           "force_password_change",                "BOOLEAN DEFAULT FALSE"),
+            ("users",           "last_login",                           "TIMESTAMP"),
         ]
         for table, col, col_type in cols:
             try:
@@ -70,6 +75,13 @@ def run_migrations():
         # Rename client_admin role to manager (idempotent)
         try:
             conn.execute(text("UPDATE roles SET name='manager' WHERE name='client_admin'"))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+
+        # Phase 1: clear any force_password_change flags — password changes are now optional
+        try:
+            conn.execute(text("UPDATE users SET force_password_change = FALSE"))
             conn.commit()
         except Exception:
             conn.rollback()
@@ -153,6 +165,7 @@ app.include_router(audit_log_router)
 app.include_router(self_service_router)
 app.include_router(registrations_router)
 app.include_router(setup_router)
+app.include_router(notifications_router)
 app.include_router(hr_reports_router, prefix="/api", tags=["hr-reports"])
 
 

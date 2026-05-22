@@ -1,23 +1,48 @@
-import os
+import base64
+import io
 from calendar import monthrange
 from datetime import date
 from typing import List, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from auth import hash_password
 from core.audit import log_audit
-from core.email import send_welcome_email
 from core.guards import get_current_user, require_permission
 from core.tenant import get_company
 from db import get_db
 from models import CompanyDetails, EmployeeDetails, PayslipData
-from orm_models import Company, Employee, EmployeeUser, Role, User, UserCompany, UserRole
-from schemas import EmployeeCreateWithCredentials, EmployeeImportResult, EmployeeRead, EmployeeUpdate
+from orm_models import (
+    Company, Employee, EmployeeDocument, EmployeeUser,
+    Role, User, UserCompany, UserRole,
+)
+from schemas import (
+    EmployeeCreateWithCredentials, EmployeeImportResult,
+    EmployeeRead, EmployeeUserInfo, EmployeeUpdateWithCredentials,
+)
 from utils import calculate_sdl, monthly_paye_from_gross, uif_employee
 
 router = APIRouter(tags=["employees"])
+
+
+def _attach_user_info(employee: Employee, db: Session) -> EmployeeRead:
+    """Build EmployeeRead with optional linked user info."""
+    link = db.query(EmployeeUser).filter_by(employee_id=employee.id).first()
+    user_info = None
+    if link:
+        u = db.get(User, link.user_id)
+        if u:
+            user_info = EmployeeUserInfo(
+                user_id=u.id,
+                email=u.email,
+                is_active=u.is_active,
+                last_login=u.last_login.isoformat() if u.last_login else None,
+            )
+    data = EmployeeRead.model_validate(employee)
+    data.user_info = user_info
+    return data
 
 
 @router.post("/companies/{company_id}/employees", response_model=EmployeeRead)
@@ -31,11 +56,10 @@ def create_employee(
         raise HTTPException(status_code=404, detail="Company not found")
     get_company(company_id, db, user)
 
-    # Validate credentials before creating employee (fail fast)
     if employee_in.login_email:
         if not employee_in.login_password:
             raise HTTPException(status_code=400, detail="login_password is required when login_email is provided")
-        if db.query(User).filter(User.email == employee_in.login_email).first():
+        if db.query(User).filter(User.email == employee_in.login_email.lower()).first():
             raise HTTPException(status_code=400, detail="A user with that email already exists")
 
     employee_data = employee_in.model_dump(exclude_unset=True, exclude={"login_email", "login_password"})
@@ -43,34 +67,23 @@ def create_employee(
     db.add(employee)
     db.flush()
 
-    # Create linked user account if credentials were provided
     if employee_in.login_email and employee_in.login_password:
         role = db.query(Role).filter(Role.name == "employee").first()
         if not role:
             raise HTTPException(status_code=500, detail="Employee role not found — run seed first")
         new_user = User(
-            email=employee_in.login_email,
+            email=employee_in.login_email.lower(),
             password_hash=hash_password(employee_in.login_password),
             first_name=employee.first_names,
             last_name=employee.last_name,
-            force_password_change=True,
+            is_active=True,
+            force_password_change=False,
         )
         db.add(new_user)
         db.flush()
         db.add(UserRole(user_id=new_user.id, role_id=role.id))
         db.add(UserCompany(user_id=new_user.id, company_id=company_id))
         db.add(EmployeeUser(user_id=new_user.id, employee_id=employee.id))
-
-        frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:5173")
-        try:
-            send_welcome_email(
-                to_email=employee_in.login_email,
-                full_name=f"{employee.first_names} {employee.last_name}",
-                temp_password=employee_in.login_password,
-                frontend_url=frontend_url,
-            )
-        except Exception:
-            pass  # Don't block employee creation if email delivery fails
 
     log_audit(
         db, user.id, "employee.create", "employee", employee.id,
@@ -80,7 +93,7 @@ def create_employee(
     )
     db.commit()
     db.refresh(employee)
-    return employee
+    return _attach_user_info(employee, db)
 
 
 @router.get("/companies/{company_id}/employees", response_model=list[EmployeeRead])
@@ -94,7 +107,8 @@ def list_employees(
     if not db.get(Company, company_id):
         raise HTTPException(status_code=404, detail="Company not found")
     get_company(company_id, db, user)
-    return list(db.query(Employee).filter(Employee.company_id == company_id).offset(skip).limit(limit).all())
+    employees = db.query(Employee).filter(Employee.company_id == company_id).offset(skip).limit(limit).all()
+    return [_attach_user_info(e, db) for e in employees]
 
 
 @router.get("/employees/{employee_id}", response_model=EmployeeRead)
@@ -107,16 +121,15 @@ def get_employee(
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
     roles = getattr(user, "role_names", [])
-    if "super_admin" in roles:
-        return employee
-    get_company(employee.company_id, db, user)
-    return employee
+    if "super_admin" not in roles:
+        get_company(employee.company_id, db, user)
+    return _attach_user_info(employee, db)
 
 
 @router.put("/employees/{employee_id}", response_model=EmployeeRead)
 def update_employee(
     employee_id: int,
-    employee_in: EmployeeUpdate,
+    employee_in: EmployeeUpdateWithCredentials,
     db: Session = Depends(get_db),
     user: User = Depends(require_permission("EDIT_EMPLOYEE")),
 ):
@@ -124,10 +137,33 @@ def update_employee(
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
     get_company(employee.company_id, db, user)
-    changes = employee_in.model_dump(exclude_unset=True)
+
+    changes = employee_in.model_dump(exclude_unset=True, exclude={"login_email", "login_password"})
     for k, v in changes.items():
         setattr(employee, k, v)
     db.add(employee)
+
+    updated_credential_fields = []
+    if employee_in.login_email or employee_in.login_password:
+        link = db.query(EmployeeUser).filter_by(employee_id=employee_id).first()
+        if not link:
+            raise HTTPException(status_code=400, detail="This employee has no linked user account")
+        linked_user = db.get(User, link.user_id)
+        if not linked_user:
+            raise HTTPException(status_code=400, detail="Linked user account not found")
+        if employee_in.login_email:
+            existing = db.query(User).filter(User.email == employee_in.login_email.lower()).first()
+            if existing and existing.id != linked_user.id:
+                raise HTTPException(status_code=400, detail="That email is already in use")
+            linked_user.email = employee_in.login_email.lower()
+            updated_credential_fields.append("email")
+        if employee_in.login_password:
+            linked_user.password_hash = hash_password(employee_in.login_password)
+            updated_credential_fields.append("password")
+        if updated_credential_fields:
+            log_audit(db, user.id, "user.credentials_updated", "user", linked_user.id,
+                      {"updated_fields": updated_credential_fields}, company_id=employee.company_id)
+
     log_audit(
         db, user.id, "employee.update", "employee", employee_id,
         {"fields_changed": list(changes.keys())},
@@ -135,27 +171,88 @@ def update_employee(
     )
     db.commit()
     db.refresh(employee)
-    return employee
+    return _attach_user_info(employee, db)
 
 
 @router.delete("/employees/{employee_id}", status_code=204)
-def delete_employee(
+def deactivate_employee(
     employee_id: int,
     db: Session = Depends(get_db),
     user: User = Depends(require_permission("DELETE_EMPLOYEE")),
 ):
+    """Deactivate employee and linked user account (does not hard-delete)."""
     employee = db.get(Employee, employee_id)
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
     get_company(employee.company_id, db, user)
+
+    employee.is_active = False
+    link = db.query(EmployeeUser).filter_by(employee_id=employee_id).first()
+    if link:
+        linked_user = db.get(User, link.user_id)
+        if linked_user:
+            linked_user.is_active = False
+
     log_audit(
-        db, user.id, "employee.delete", "employee", employee_id,
+        db, user.id, "employee.deactivated", "employee", employee_id,
         {"name": f"{employee.first_names} {employee.last_name}"},
         company_id=employee.company_id,
     )
-    db.delete(employee)
     db.commit()
     return None
+
+
+@router.get("/employees/{employee_id}/documents")
+def get_employee_documents(
+    employee_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("VIEW_DOCUMENTS")),
+):
+    employee = db.get(Employee, employee_id)
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    roles = getattr(user, "role_names", [])
+    if "super_admin" not in roles:
+        get_company(employee.company_id, db, user)
+    docs = db.query(EmployeeDocument).filter(
+        EmployeeDocument.employee_id == employee_id
+    ).order_by(EmployeeDocument.uploaded_at.desc()).all()
+    return [
+        {
+            "id": d.id,
+            "document_type": d.document_type,
+            "description": d.description,
+            "file_name": d.file_name,
+            "file_size": d.file_size,
+            "status": d.status,
+            "rejection_reason": d.rejection_reason,
+            "uploaded_at": d.uploaded_at.isoformat(),
+        }
+        for d in docs
+    ]
+
+
+@router.get("/employees/{employee_id}/documents/{doc_id}/download")
+def download_employee_document(
+    employee_id: int,
+    doc_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("VIEW_DOCUMENTS")),
+):
+    employee = db.get(Employee, employee_id)
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    roles = getattr(user, "role_names", [])
+    if "super_admin" not in roles:
+        get_company(employee.company_id, db, user)
+    doc = db.get(EmployeeDocument, doc_id)
+    if not doc or doc.employee_id != employee_id:
+        raise HTTPException(status_code=404, detail="Document not found")
+    raw = base64.b64decode(doc.file_data)
+    return StreamingResponse(
+        io.BytesIO(raw), media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{doc.file_name}"'},
+    )
 
 
 @router.get(

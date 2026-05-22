@@ -1,18 +1,15 @@
-import os
-import secrets
-from datetime import datetime, timedelta
+# activation_tokens table is retained for backwards compatibility — not used in current flow.
+# New accounts are created immediately active with a password set by the admin.
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from auth import hash_password, hash_refresh_token
+from auth import hash_password
 from core.audit import log_audit
-from core.email import send_activation_email, send_welcome_email
 from core.guards import require_permission
 from db import get_db
 from orm_models import (
     AccountantAssignment,
-    ActivationToken,
     Company,
     Employee,
     EmployeeUser,
@@ -27,11 +24,10 @@ from schemas import (
     ManagerAssignRequest,
     UserCreateRequest,
     UserRead,
+    UserUpdateRequest,
 )
 
 router = APIRouter(tags=["users"])
-
-ACTIVATION_TOKEN_HOURS = 72
 
 
 def _user_read_simple(user_obj: User, db: Session) -> UserRead:
@@ -42,7 +38,7 @@ def _user_read_simple(user_obj: User, db: Session) -> UserRead:
         first_name=user_obj.first_name,
         last_name=user_obj.last_name,
         is_active=user_obj.is_active,
-        force_password_change=bool(getattr(user_obj, "force_password_change", False)),
+        force_password_change=False,
         roles=user_roles,
     )
 
@@ -77,6 +73,10 @@ def create_user(
         raise HTTPException(status_code=400, detail=f"Invalid role. Must be one of: {', '.join(sorted(allowed_roles))}")
     if body.role == "super_admin" and "super_admin" not in current_roles:
         raise HTTPException(status_code=403, detail="Only Super Admin can create Super Admin accounts")
+    if not body.password or not body.confirm_password:
+        raise HTTPException(status_code=422, detail="Password and confirm password are required")
+    if body.password != body.confirm_password:
+        raise HTTPException(status_code=422, detail="Passwords do not match")
 
     if db.query(User).filter(User.email == body.email.lower()).first():
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -85,70 +85,52 @@ def create_user(
     if not role_obj:
         raise HTTPException(status_code=500, detail=f"Role '{body.role}' not seeded")
 
-    frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:5173")
-    warning = None
+    new_user = User(
+        email=body.email.lower(),
+        password_hash=hash_password(body.password),
+        first_name=body.first_name,
+        last_name=body.last_name,
+        is_active=True,
+        force_password_change=False,
+    )
+    db.add(new_user)
+    db.flush()
+    db.add(UserRole(user_id=new_user.id, role_id=role_obj.id))
+    log_audit(db, current_user.id, "user.created", "user", new_user.id)
+    db.commit()
+    return _user_read_simple(new_user, db)
 
-    if body.role in ("accountant", "manager"):
-        new_user = User(
-            email=body.email.lower(),
-            password_hash="!",  # placeholder — not valid bcrypt, login will fail until activated
-            first_name=body.first_name,
-            last_name=body.last_name,
-            is_active=False,
-            force_password_change=False,
-        )
-        db.add(new_user)
-        db.flush()
-        db.add(UserRole(user_id=new_user.id, role_id=role_obj.id))
 
-        raw_token = secrets.token_urlsafe(32)
-        token_hash = hash_refresh_token(raw_token)
-        db.add(ActivationToken(
-            user_id=new_user.id,
-            token_hash=token_hash,
-            expires_at=datetime.utcnow() + timedelta(hours=ACTIVATION_TOKEN_HOURS),
-        ))
-        log_audit(db, current_user.id, "user.created", "user", new_user.id)
-        db.commit()
+@router.patch("/users/{user_id}", response_model=UserRead)
+def update_user_credentials(
+    user_id: int,
+    body: UserUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("CREATE_USER")),
+):
+    """SUPER_ADMIN: update a user's email and/or password."""
+    target = db.get(User, user_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
 
-        activation_link = f"{frontend_url}/activate?token={raw_token}"
-        try:
-            send_activation_email(new_user.email, f"{body.first_name} {body.last_name}",
-                                  body.role.capitalize(), activation_link)
-        except Exception:
-            warning = "User created but activation email failed. Use resend-activation to retry."
+    updated_fields = []
+    if body.email is not None:
+        existing = db.query(User).filter(User.email == body.email.lower()).first()
+        if existing and existing.id != user_id:
+            raise HTTPException(status_code=400, detail="That email is already in use")
+        target.email = body.email.lower()
+        updated_fields.append("email")
+    if body.password is not None:
+        target.password_hash = hash_password(body.password)
+        updated_fields.append("password")
 
-    else:  # super_admin
-        if not body.password or not body.confirm_password:
-            raise HTTPException(status_code=422, detail="Password is required for Super Admin accounts")
-        if body.password != body.confirm_password:
-            raise HTTPException(status_code=422, detail="Passwords do not match")
+    if not updated_fields:
+        raise HTTPException(status_code=400, detail="No fields to update")
 
-        new_user = User(
-            email=body.email.lower(),
-            password_hash=hash_password(body.password),
-            first_name=body.first_name,
-            last_name=body.last_name,
-            is_active=True,
-            force_password_change=True,
-        )
-        db.add(new_user)
-        db.flush()
-        db.add(UserRole(user_id=new_user.id, role_id=role_obj.id))
-        log_audit(db, current_user.id, "user.created", "user", new_user.id)
-        db.commit()
-
-        try:
-            send_welcome_email(new_user.email, f"{body.first_name} {body.last_name}",
-                               body.password, frontend_url)
-        except Exception:
-            warning = "User created but welcome email failed to send."
-
-    result = _user_read_simple(new_user, db)
-    if warning:
-        # Attach warning via response header approach — return dict instead
-        return result
-    return result
+    log_audit(db, current_user.id, "user.credentials_updated", "user", user_id,
+              {"updated_fields": updated_fields})
+    db.commit()
+    return _user_read_simple(target, db)
 
 
 @router.post("/users/{user_id}/resend-activation")
@@ -157,38 +139,12 @@ def resend_activation(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("CREATE_USER")),
 ):
+    # activation_tokens retained for backwards compatibility — not used in current flow.
+    # This endpoint is kept to avoid 404 on old links, but returns a helpful message.
     target = db.get(User, user_id)
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
-    if target.is_active:
-        raise HTTPException(status_code=400, detail="User is already active")
-
-    # Invalidate existing tokens
-    db.query(ActivationToken).filter(
-        ActivationToken.user_id == user_id,
-        ActivationToken.used_at.is_(None),
-    ).update({"used_at": datetime.utcnow()})
-
-    raw_token = secrets.token_urlsafe(32)
-    token_hash = hash_refresh_token(raw_token)
-    db.add(ActivationToken(
-        user_id=user_id,
-        token_hash=token_hash,
-        expires_at=datetime.utcnow() + timedelta(hours=ACTIVATION_TOKEN_HOURS),
-    ))
-    db.commit()
-
-    roles = [db.get(Role, ur.role_id).name for ur in target.roles]
-    role_display = roles[0].capitalize() if roles else "User"
-    frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:5173")
-    activation_link = f"{frontend_url}/activate?token={raw_token}"
-    try:
-        send_activation_email(target.email, f"{target.first_name or ''} {target.last_name or ''}".strip(),
-                              role_display, activation_link)
-    except Exception:
-        return {"message": "Activation email failed to send. Token was reset — try again.", "warning": True}
-
-    return {"message": "Activation email resent."}
+    return {"message": "Accounts are now created immediately active. Use 'Edit credentials' to set a new password if needed."}
 
 
 @router.get("/users/accountants", response_model=list[UserRead])

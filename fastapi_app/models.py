@@ -65,6 +65,7 @@ class PayslipData(BaseModel):
     leave_income: float = 0.0
     sdl_details: Optional[dict] = None
     leave_income_details: Optional[dict] = None
+    record_id: Optional[int] = None
 
 class ReversePayrollInput(BaseModel):
     employee: EmployeeDetails

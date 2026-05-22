@@ -50,8 +50,10 @@ def get_my_payslips(
     link = db.query(EmployeeUser).filter_by(user_id=user.id).first()
     if not link:
         return {"total": 0, "payslips": []}
+    # Employees only see payslips that have been explicitly distributed by admin
     q = db.query(PayrollRecord).filter(
-        PayrollRecord.employee_id == link.employee_id
+        PayrollRecord.employee_id == link.employee_id,
+        PayrollRecord.distributed == True,
     ).order_by(PayrollRecord.payrun_year.desc(), PayrollRecord.payrun_month.desc())
     total = q.count()
     records = q.offset(offset).limit(limit).all()

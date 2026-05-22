@@ -18,7 +18,8 @@ from core.guards import get_current_user, require_permission
 from core.tenant import get_company
 from db import get_db
 from models import CompanyDetails, EmployeeDetails, PayslipData, PayrollInput, ReversePayrollInput, ReversePayrollResult
-from orm_models import Company, Employee, EmployeeUser, PayrollRecord, User
+from orm_models import AccountantAssignment, Company, Employee, EmployeeUser, Notification, PayrollRecord, Role, User, UserRole
+from sqlalchemy import insert
 from schemas import (
     BulkPayrollEmployeeResult,
     BulkPayrollRequest,
@@ -98,12 +99,13 @@ async def calculate_payroll(
     if (input_data.other_deductions or 0.0) > 0:
         deductions_list.append(("Other Deductions", input_data.other_deductions))
 
+    saved_record_id = None
     if input_data.company_id:
         try:
             payrun_month = input_data.period_end.month
             payrun_year = input_data.period_end.year
             payrun_period = f"{payrun_year}-{payrun_month:02d}"
-            db.add(PayrollRecord(
+            record = PayrollRecord(
                 company_id=input_data.company_id,
                 employee_id=input_data.employee_id,
                 payrun_month=payrun_month,
@@ -127,8 +129,11 @@ async def calculate_payroll(
                 total_deductions=total_deductions,
                 net_pay=net_pay,
                 created_by=user.id,
-            ))
+            )
+            db.add(record)
             db.commit()
+            db.refresh(record)
+            saved_record_id = record.id
         except Exception:
             db.rollback()
 
@@ -149,6 +154,7 @@ async def calculate_payroll(
         leave_income=leave_income,
         sdl_details=sdl_details,
         leave_income_details=leave_income_details,
+        record_id=saved_record_id,
     )
 
 
@@ -580,6 +586,59 @@ def get_payroll_period_status(
     }
 
 
+@router.post("/payroll-records/{record_id}/distribute")
+def distribute_payslip(
+    record_id: int,
+    user: User = Depends(require_permission("RUN_PAYROLL")),
+    db: Session = Depends(get_db),
+):
+    record = db.get(PayrollRecord, record_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Payroll record not found")
+    get_company(record.company_id, db, user)
+
+    if not record.employee_id:
+        raise HTTPException(status_code=400, detail="No employee linked to this payroll record")
+
+    link = db.query(EmployeeUser).filter_by(employee_id=record.employee_id).first()
+    if not link:
+        raise HTTPException(
+            status_code=400,
+            detail="This employee does not have an active portal account. Create login credentials before distributing payslips.",
+        )
+    portal_user = db.get(User, link.user_id)
+    if not portal_user or not portal_user.is_active:
+        raise HTTPException(
+            status_code=400,
+            detail="This employee does not have an active portal account. Create login credentials before distributing payslips.",
+        )
+
+    record.distributed = True
+    record.distributed_at = datetime.utcnow()
+    record.distributed_by = user.id
+
+    emp = db.get(Employee, record.employee_id)
+    period_label = record.payrun_period or f"{record.payrun_year}-{record.payrun_month:02d}"
+    db.execute(
+        insert(Notification),
+        [{
+            "recipient_user_id": portal_user.id,
+            "type": "PAYSLIP_AVAILABLE",
+            "message": f"Your payslip for {period_label} is available.",
+            "entity_type": "payroll_record",
+            "entity_id": record.id,
+            "is_read": False,
+        }],
+    )
+
+    log_audit(db, user.id, "payslip.distributed", "payroll_record", record.id,
+              {"employee_id": record.employee_id, "period": period_label},
+              company_id=record.company_id)
+    db.commit()
+    employee_name = emp.first_names + " " + emp.last_name if emp else record.employee_name
+    return {"message": f"Payslip distributed successfully.", "employee_name": employee_name}
+
+
 @router.get("/payroll-records/{record_id}/payslip")
 def download_payslip_by_record(
     record_id: int,
@@ -593,6 +652,9 @@ def download_payslip_by_record(
     if "employee" in roles and not any(r in roles for r in ("super_admin", "accountant", "manager")):
         link = db.query(EmployeeUser).filter_by(user_id=user.id).first()
         if not link or link.employee_id != record.employee_id:
+            raise HTTPException(status_code=403, detail="Forbidden")
+        # Enforce: employees can only download distributed payslips
+        if not record.distributed:
             raise HTTPException(status_code=403, detail="Forbidden")
     else:
         get_company(record.company_id, db, user)

@@ -135,12 +135,28 @@ class EmployeeUpdate(BaseModel):
     medical_aid_scheme_name: Optional[str] = None
 
 
-class EmployeeRead(EmployeeBase):
-    id: int
-    company_id: int
+class EmployeeUserInfo(BaseModel):
+    user_id: int
+    email: str
+    is_active: bool
+    last_login: Optional[str] = None
 
     class Config:
         from_attributes = True
+
+
+class EmployeeRead(EmployeeBase):
+    id: int
+    company_id: int
+    user_info: Optional[EmployeeUserInfo] = None
+
+    class Config:
+        from_attributes = True
+
+
+class EmployeeUpdateWithCredentials(EmployeeUpdate):
+    login_email: Optional[EmailStr] = None
+    login_password: Optional[str] = Field(None, min_length=8, max_length=64)
 
 
 class CompanyWithEmployees(CompanyRead):
@@ -407,4 +423,22 @@ class AccountantRegistrationReview(BaseModel):
     reason: Optional[str] = None
 
 
+# ------------------ User Credentials Update ------------------
+class UserUpdateRequest(BaseModel):
+    email: Optional[EmailStr] = None
+    password: Optional[str] = Field(None, min_length=8, max_length=64)
+
+
+# ------------------ Notifications ------------------
+class NotificationRead(BaseModel):
+    id: int
+    type: str
+    message: str
+    entity_type: Optional[str] = None
+    entity_id: Optional[int] = None
+    is_read: bool
+    created_at: str
+
+    class Config:
+        from_attributes = True
 

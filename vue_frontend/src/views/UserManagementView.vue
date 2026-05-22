@@ -41,8 +41,7 @@
         </div>
       </div>
 
-      <!-- Password fields — only for super_admin -->
-      <template v-if="newUser.role === 'super_admin'">
+      <template v-if="newUser.role">
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">Password</label>
@@ -56,10 +55,7 @@
             <input v-model="newUser.confirm_password" :type="showNewPw ? 'text' : 'password'" class="form-input" placeholder="Repeat password" />
           </div>
         </div>
-        <p class="role-hint">Super Admin accounts are activated immediately. A welcome email with credentials will be sent.</p>
-      </template>
-      <template v-else-if="newUser.role">
-        <p class="role-hint">An activation email will be sent to the user. They will set their own password when activating.</p>
+        <p class="role-hint">The account will be activated immediately. Provide these credentials directly to the user — no email is sent.</p>
       </template>
 
       <div v-if="createError" class="form-error-box">{{ createError }}</div>
@@ -101,24 +97,45 @@
               </td>
               <td>
                 <span v-if="u.is_active" class="badge badge-green">Active</span>
-                <span v-else class="badge badge-yellow">Pending activation</span>
+                <span v-else class="badge badge-gray">Inactive</span>
               </td>
               <td class="action-cell">
-                <button
-                  v-if="!u.is_active && !isSuperAdmin(u)"
-                  @click="resendInvitation(u)"
-                  :disabled="resending === u.id"
-                  class="btn-light btn-sm"
-                >
-                  {{ resending === u.id ? 'Sending…' : 'Resend invitation' }}
-                </button>
-                <span v-if="resendResult[u.id]" class="resend-result" :class="resendResult[u.id].ok ? 'result-ok' : 'result-err'">
-                  {{ resendResult[u.id].msg }}
-                </span>
+                <button @click="openEditCreds(u)" class="btn-light btn-sm">Edit credentials</button>
               </td>
             </tr>
           </tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- Edit credentials modal -->
+    <div v-if="editTarget" class="modal-overlay" @click.self="closeEditCreds">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3 class="modal-title">Edit credentials — {{ editTarget.first_name }} {{ editTarget.last_name }}</h3>
+          <button class="modal-close" @click="closeEditCreds">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">New Email (leave blank to keep current)</label>
+            <input v-model="editCreds.email" type="email" class="form-input" :placeholder="editTarget.email" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">New Password (leave blank to keep current)</label>
+            <div class="pw-wrap">
+              <input v-model="editCreds.password" :type="showEditPw ? 'text' : 'password'" class="form-input" placeholder="Min. 8 characters" />
+              <button type="button" class="pw-toggle" @click="showEditPw = !showEditPw">{{ showEditPw ? 'Hide' : 'Show' }}</button>
+            </div>
+          </div>
+          <div v-if="editError" class="form-error-box">{{ editError }}</div>
+          <div v-if="editSuccess" class="form-success-box">{{ editSuccess }}</div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-light" @click="closeEditCreds">Cancel</button>
+          <button class="btn-primary" @click="saveEditCreds" :disabled="editSaving">
+            {{ editSaving ? 'Saving…' : 'Save' }}
+          </button>
+        </div>
       </div>
     </div>
 
@@ -139,8 +156,6 @@ export default {
     const createError = ref('')
     const createSuccess = ref('')
     const showNewPw = ref(false)
-    const resending = ref(null)
-    const resendResult = reactive({})
 
     const newUser = reactive({
       first_name: '',
@@ -150,6 +165,14 @@ export default {
       password: '',
       confirm_password: '',
     })
+
+    // Edit credentials state
+    const editTarget = ref(null)
+    const editCreds = reactive({ email: '', password: '' })
+    const showEditPw = ref(false)
+    const editSaving = ref(false)
+    const editError = ref('')
+    const editSuccess = ref('')
 
     const resetForm = () => {
       newUser.first_name = ''
@@ -181,32 +204,25 @@ export default {
         createError.value = 'First name, last name, email, and role are required.'
         return
       }
-      if (newUser.role === 'super_admin') {
-        if (!newUser.password || !newUser.confirm_password) {
-          createError.value = 'Password is required for Super Admin accounts.'
-          return
-        }
-        if (newUser.password !== newUser.confirm_password) {
-          createError.value = 'Passwords do not match.'
-          return
-        }
+      if (!newUser.password || !newUser.confirm_password) {
+        createError.value = 'Password is required.'
+        return
+      }
+      if (newUser.password !== newUser.confirm_password) {
+        createError.value = 'Passwords do not match.'
+        return
       }
       creating.value = true
       try {
-        const payload = {
+        await axios.post('/users', {
           first_name: newUser.first_name,
           last_name: newUser.last_name,
           email: newUser.email,
           role: newUser.role,
-        }
-        if (newUser.role === 'super_admin') {
-          payload.password = newUser.password
-          payload.confirm_password = newUser.confirm_password
-        }
-        await axios.post('/users', payload)
-        createSuccess.value = newUser.role === 'super_admin'
-          ? 'Super Admin created. A welcome email has been sent.'
-          : `Invitation sent to ${newUser.email}. The user will receive an activation link.`
+          password: newUser.password,
+          confirm_password: newUser.confirm_password,
+        })
+        createSuccess.value = `User created. Provide the credentials directly to ${newUser.email}.`
         resetForm()
         await loadUsers()
       } catch (e) {
@@ -216,16 +232,40 @@ export default {
       }
     }
 
-    const resendInvitation = async (user) => {
-      resending.value = user.id
-      delete resendResult[user.id]
+    const openEditCreds = (u) => {
+      editTarget.value = u
+      editCreds.email = ''
+      editCreds.password = ''
+      editError.value = ''
+      editSuccess.value = ''
+      showEditPw.value = false
+    }
+
+    const closeEditCreds = () => {
+      editTarget.value = null
+    }
+
+    const saveEditCreds = async () => {
+      editError.value = ''
+      editSuccess.value = ''
+      if (!editCreds.email && !editCreds.password) {
+        editError.value = 'Enter a new email or password to update.'
+        return
+      }
+      editSaving.value = true
       try {
-        await axios.post(`/users/${user.id}/resend-activation`)
-        resendResult[user.id] = { ok: true, msg: 'Invitation resent.' }
+        const payload = {}
+        if (editCreds.email) payload.email = editCreds.email
+        if (editCreds.password) payload.password = editCreds.password
+        await axios.patch(`/users/${editTarget.value.id}`, payload)
+        editSuccess.value = 'Credentials updated successfully.'
+        await loadUsers()
+        const updated = users.value.find(u => u.id === editTarget.value.id)
+        if (updated) editTarget.value = updated
       } catch (e) {
-        resendResult[user.id] = { ok: false, msg: e?.response?.data?.detail || 'Failed to resend.' }
+        editError.value = e?.response?.data?.detail || 'Failed to update credentials.'
       } finally {
-        resending.value = null
+        editSaving.value = false
       }
     }
 
@@ -234,15 +274,13 @@ export default {
       return map[r] || r
     }
 
-    const isSuperAdmin = (u) => u.roles?.includes('super_admin')
-
     onMounted(loadUsers)
 
     return {
       users, loadingUsers, showCreateForm,
       newUser, creating, createError, createSuccess, showNewPw,
-      resending, resendResult,
-      createUser, resendInvitation, formatRole, isSuperAdmin,
+      editTarget, editCreds, showEditPw, editSaving, editError, editSuccess,
+      createUser, openEditCreds, closeEditCreds, saveEditCreds, formatRole,
     }
   }
 }
@@ -376,7 +414,7 @@ export default {
   font-size: 11px; font-weight: 600;
 }
 .badge-green { background: #dcfce7; color: #15803d; }
-.badge-yellow { background: #fef9c3; color: #854d0e; }
+.badge-gray { background: var(--color-bg-page); color: var(--color-text-muted); }
 
 .role-badge {
   display: inline-block;
@@ -389,10 +427,55 @@ export default {
 }
 
 .action-cell { white-space: nowrap; }
-
 .btn-sm { padding: 4px 12px; font-size: 12px; }
 
-.resend-result { font-size: 12px; margin-left: 8px; }
-.result-ok { color: #15803d; }
-.result-err { color: #dc2626; }
+/* Modal */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.4);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 500;
+}
+
+.modal-card {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  width: 440px;
+  max-width: 95vw;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.modal-title { font-size: 14px; font-weight: 600; color: var(--color-text-base); margin: 0; }
+
+.modal-close {
+  background: none; border: none; font-size: 16px;
+  color: var(--color-text-muted); cursor: pointer; padding: 2px 4px; line-height: 1;
+}
+.modal-close:hover { color: var(--color-text-base); }
+
+.modal-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--color-border);
+}
 </style>

@@ -151,6 +151,27 @@
         </div>
       </div>
 
+      <!-- Recent document uploads -->
+      <div v-if="hasRole(['super_admin','accountant']) && recentDocUploads.length > 0" class="card doc-uploads-card">
+        <h2 class="section-title">
+          <svg class="title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/>
+            <line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/>
+          </svg>
+          Recent Document Uploads
+          <router-link to="/approvals/documents" class="view-all-inline">View all →</router-link>
+        </h2>
+        <div class="doc-upload-list">
+          <div v-for="n in recentDocUploads" :key="n.id" class="doc-upload-item">
+            <div class="doc-upload-body">
+              <p class="doc-upload-msg">{{ n.message }}</p>
+              <p class="doc-upload-time">{{ fmtTime(n.created_at) }}</p>
+            </div>
+            <router-link to="/approvals/documents" class="doc-upload-action">Review</router-link>
+          </div>
+        </div>
+      </div>
+
       <!-- Two-column: Alerts + Recent Activity -->
       <div class="two-col">
 
@@ -217,6 +238,7 @@ export default {
     const auth = useAuthStore()
     const stats = ref({})
     const loading = ref(true)
+    const recentDocUploads = ref([])
 
     const hasRole = (roles) => auth.roles?.some(r => roles.includes(r))
 
@@ -257,15 +279,23 @@ export default {
     const load = async () => {
       loading.value = true
       try {
-        const { data } = await axios.get('/dashboard/stats')
-        stats.value = data
+        const [statsRes, notifRes] = await Promise.allSettled([
+          axios.get('/dashboard/stats'),
+          axios.get('/notifications'),
+        ])
+        if (statsRes.status === 'fulfilled') stats.value = statsRes.value.data
+        if (notifRes.status === 'fulfilled') {
+          recentDocUploads.value = (notifRes.value.data || [])
+            .filter(n => n.type === 'DOCUMENT_UPLOADED')
+            .slice(0, 5)
+        }
       } catch {}
       loading.value = false
     }
 
     onMounted(load)
 
-    return { stats, loading, hasRole, firstName, greeting, fmtMoney, fmtTime, actionLabel, actionClass }
+    return { stats, loading, recentDocUploads, hasRole, firstName, greeting, fmtMoney, fmtTime, actionLabel, actionClass }
   }
 }
 </script>
@@ -409,6 +439,28 @@ export default {
 .approval-count { font-size: 22px; font-weight: 700; color: var(--color-text-base); line-height: 1.1; }
 .approval-label { font-size: 11.5px; color: var(--color-text-muted); }
 .approval-arrow { font-size: 16px; color: var(--color-accent); flex-shrink: 0; }
+
+/* Recent doc uploads */
+.doc-uploads-card { padding: 20px; }
+.view-all-inline {
+  margin-left: auto;
+  font-size: 12px; font-weight: 400;
+  color: var(--color-accent); text-decoration: none;
+  text-transform: none; letter-spacing: 0;
+}
+.view-all-inline:hover { text-decoration: underline; }
+
+.doc-upload-list { display: flex; flex-direction: column; gap: 0; margin-top: 10px; }
+.doc-upload-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 0; border-bottom: 1px solid var(--color-border);
+}
+.doc-upload-item:last-child { border-bottom: none; }
+.doc-upload-body { flex: 1; min-width: 0; }
+.doc-upload-msg { font-size: 13px; color: var(--color-text-base); margin: 0 0 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.doc-upload-time { font-size: 11px; color: var(--color-text-muted); margin: 0; }
+.doc-upload-action { font-size: 12px; color: var(--color-accent); text-decoration: none; white-space: nowrap; flex-shrink: 0; }
+.doc-upload-action:hover { text-decoration: underline; }
 
 @media (max-width: 900px) {
   .stats-grid { grid-template-columns: 1fr 1fr; }

@@ -91,6 +91,7 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     force_password_change: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    last_login: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     roles = relationship("UserRole", back_populates="user", cascade="all, delete-orphan")
     companies = relationship("UserCompany", back_populates="user", cascade="all, delete-orphan")
@@ -191,11 +192,16 @@ class PayrollRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     created_by: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
-    # Approval workflow (added via migration for existing DBs)
+    # Approval workflow
     status: Mapped[str] = mapped_column(String(20), default="approved", server_default="approved")
     approved_by: Mapped[int | None] = mapped_column(Integer, nullable=True)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     rejection_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+    # Distribution to employee portal
+    distributed: Mapped[bool] = mapped_column(Boolean, default=False)
+    distributed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    distributed_by: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Relationships
     company = relationship("Company", back_populates="payroll_records")
@@ -350,5 +356,15 @@ class AccountantRegistrationRequest(Base):
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
+class Notification(Base):
+    __tablename__ = "notifications"
 
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    recipient_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    entity_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    entity_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    is_read: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
 
