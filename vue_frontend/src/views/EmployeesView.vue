@@ -22,6 +22,16 @@
       </div>
     </div>
 
+    <!-- Active / Archived toggle -->
+    <div class="view-toggle">
+      <button @click="setView('active')" class="toggle-btn" :class="{ active: viewMode === 'active' }">
+        Active <span class="count-chip">{{ activeEmployees.length }}</span>
+      </button>
+      <button @click="setView('archived')" class="toggle-btn" :class="{ active: viewMode === 'archived' }">
+        Archived <span class="count-chip">{{ archivedEmployees.length }}</span>
+      </button>
+    </div>
+
     <!-- Employee table -->
     <div class="card" style="padding:0; overflow:hidden;">
       <table class="data-table">
@@ -35,27 +45,63 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="emp in employees" :key="emp.id">
+          <tr v-for="emp in visibleEmployees" :key="emp.id" :class="{ 'row-archived': !emp.is_active }">
             <td class="font-medium">{{ emp.first_names }}</td>
             <td>{{ emp.last_name }}</td>
             <td>{{ emp.employee_no || '—' }}</td>
             <td>{{ emp.position || '—' }}</td>
             <td>
               <div class="actions" style="justify-content:flex-end">
-                <button @click="openEdit(emp)" class="btn-secondary">Edit</button>
-                <button @click="openLeave(emp)" class="btn-light">Leave</button>
-                <button @click="remove(emp.id)" class="btn-text danger">Delete</button>
+                <template v-if="emp.is_active">
+                  <button @click="openEdit(emp)" class="btn-secondary">Edit</button>
+                  <button @click="openLeave(emp)" class="btn-light">Leave</button>
+                  <button @click="confirmArchive(emp)" class="btn-text danger">Archive</button>
+                </template>
+                <template v-else>
+                  <span class="badge-archived">Archived</span>
+                  <button @click="restore(emp)" class="btn-secondary">Restore</button>
+                </template>
               </div>
             </td>
           </tr>
         </tbody>
       </table>
-      <div v-if="employees.length === 0" class="empty-state">
+      <div v-if="visibleEmployees.length === 0" class="empty-state">
         <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
           <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/>
           <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/>
         </svg>
-        <p>No employees yet. Add your first employee.</p>
+        <p>{{ viewMode === 'archived' ? 'No archived employees.' : 'No employees yet. Add your first employee.' }}</p>
+      </div>
+    </div>
+
+    <!-- Archive confirmation modal -->
+    <div v-if="archiveTarget" class="modal-overlay" style="z-index:600" @click.self="archiveTarget = null">
+      <div class="modal" style="max-width:440px">
+        <div class="modal-header">
+          <h2>Archive employee?</h2>
+          <button @click="archiveTarget = null" class="modal-close">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <p class="archive-name">{{ archiveTarget.first_names }} {{ archiveTarget.last_name }}</p>
+          <p class="archive-detail">Archiving this employee will:</p>
+          <ul class="archive-list">
+            <li>Remove them from all future payroll runs</li>
+            <li>Disable their portal login (if they have one)</li>
+            <li>Preserve all historical payslips and audit records</li>
+          </ul>
+          <p class="archive-restore-note">You can restore them at any time from the Archived tab.</p>
+        </div>
+        <div class="modal-footer">
+          <button @click="archiveTarget = null" class="btn-secondary">Cancel</button>
+          <button @click="doArchive" :disabled="archiving" class="btn-danger">
+            {{ archiving ? 'Archiving…' : 'Archive employee' }}
+          </button>
+        </div>
       </div>
     </div>
 
@@ -315,7 +361,7 @@
           <!-- ── Login Credentials tab (create only) ── -->
           <div v-if="activeTab === 'credentials'" class="tab-content fade-in">
             <div class="info-box info-blue" style="margin-bottom:16px">
-              Optionally create a login account for this employee. They will receive a welcome email with a temporary password and be prompted to change it on first login. Leave blank to skip.
+              Optionally create a portal login for this employee. The account is activated immediately — provide the credentials directly to the employee. Leave blank to skip.
             </div>
             <div class="form-grid">
               <div class="form-group span-2">
@@ -517,6 +563,15 @@ export default {
     const activeTab   = ref('personal')
     const saving      = ref(false)
     const calculating = ref(false)
+    const viewMode    = ref('active')
+
+    const activeEmployees   = computed(() => employees.value.filter(e => e.is_active))
+    const archivedEmployees = computed(() => employees.value.filter(e => !e.is_active))
+    const visibleEmployees  = computed(() =>
+      viewMode.value === 'archived' ? archivedEmployees.value : activeEmployees.value
+    )
+
+    const setView = (mode) => { viewMode.value = mode }
 
     const TABS = computed(() => ALL_TABS.filter(t => !t.createOnly || !editing.value))
 
@@ -541,7 +596,7 @@ export default {
 
     const load = async () => {
       const [emps, company] = await Promise.all([
-        axios.get(`/companies/${companyId}/employees`, authHeader()),
+        axios.get(`/companies/${companyId}/employees`, { ...authHeader(), params: { include_inactive: true } }),
         axios.get(`/companies/${companyId}`, authHeader())
       ])
       employees.value   = emps.data
@@ -692,14 +747,34 @@ export default {
       }
     }
 
-    const remove = async (id) => {
-      if (!confirm('Delete this employee? This cannot be undone.')) return
+    // Archive / restore
+    const archiveTarget = ref(null)
+    const archiving = ref(false)
+
+    const confirmArchive = (emp) => { archiveTarget.value = emp }
+
+    const doArchive = async () => {
+      if (!archiveTarget.value) return
+      archiving.value = true
       try {
-        await axios.delete(`/employees/${id}`, authHeader())
-        toast.success('Employee deleted')
+        await axios.delete(`/employees/${archiveTarget.value.id}`, authHeader())
+        toast.success(`${archiveTarget.value.first_names} ${archiveTarget.value.last_name} archived.`)
+        archiveTarget.value = null
         await load()
       } catch (err) {
-        toast.error(`Failed to delete: ${err.response?.data?.detail || err.message}`)
+        toast.error(`Failed to archive: ${err.response?.data?.detail || err.message}`)
+      } finally {
+        archiving.value = false
+      }
+    }
+
+    const restore = async (emp) => {
+      try {
+        await axios.post(`/employees/${emp.id}/restore`, {}, authHeader())
+        toast.success(`${emp.first_names} ${emp.last_name} restored.`)
+        await load()
+      } catch (err) {
+        toast.error(`Failed to restore: ${err.response?.data?.detail || err.message}`)
       }
     }
 
@@ -828,7 +903,9 @@ export default {
     return {
       TABS, companyId, employees, companyName,
       showDrawer, editing, form, creds, activeTab, saving, calculating,
-      openCreate, openEdit, close, save, remove,
+      viewMode, activeEmployees, archivedEmployees, visibleEmployees, setView,
+      openCreate, openEdit, close, save,
+      archiveTarget, archiving, confirmArchive, doArchive, restore,
       previewSalary, previewResult, totalDeductions,
       calcMode, reverseToggle, targetNetPay, sdl, leave,
       showImportModal, csvFileInput, importPreview, importError, importResult, importLoading,
@@ -841,6 +918,124 @@ export default {
 </script>
 
 <style scoped>
+/* ── View toggle ─────────────────────────────────────────────────────────── */
+.view-toggle {
+  display: flex;
+  gap: 0;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 3px;
+  width: fit-content;
+}
+
+.toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 14px;
+  border: none;
+  background: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+  font-family: inherit;
+}
+
+.toggle-btn.active {
+  background: var(--color-accent);
+  color: #fff;
+}
+
+.toggle-btn:not(.active):hover {
+  background: var(--color-bg-page);
+  color: var(--color-text-base);
+}
+
+.count-chip {
+  background: rgba(0,0,0,0.12);
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 6px;
+  min-width: 20px;
+  text-align: center;
+}
+
+.toggle-btn.active .count-chip {
+  background: rgba(255,255,255,0.25);
+}
+
+/* ── Archived row ────────────────────────────────────────────────────────── */
+.row-archived td {
+  opacity: 0.6;
+}
+
+.badge-archived {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+/* ── Archive modal ───────────────────────────────────────────────────────── */
+.archive-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text-base);
+  margin: 0 0 12px;
+}
+
+.archive-detail {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  margin: 0 0 8px;
+}
+
+.archive-list {
+  padding-left: 18px;
+  margin: 0 0 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.archive-list li {
+  font-size: 13px;
+  color: var(--color-text-base);
+}
+
+.archive-restore-note {
+  font-size: 12px;
+  color: #15803d;
+  background: #dcfce7;
+  border: 1px solid #86efac;
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin: 0;
+}
+
+.btn-danger {
+  padding: 8px 18px;
+  background: #dc2626;
+  color: #fff;
+  border: none;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.12s;
+}
+.btn-danger:hover:not(:disabled) { background: #b91c1c; }
+.btn-danger:disabled { opacity: 0.55; cursor: not-allowed; }
+
 /* ── Drawer backdrop ─────────────────────────────────────────────────────── */
 .drawer-backdrop {
   position: fixed;

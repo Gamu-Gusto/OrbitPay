@@ -515,7 +515,7 @@ export default {
       try {
         const [companyRes, empsRes] = await Promise.all([
           axios.get(`${API}/companies/${selectedCompanyId.value}`),
-          axios.get(`${API}/companies/${selectedCompanyId.value}/employees`)
+          axios.get(`${API}/companies/${selectedCompanyId.value}/employees`, { params: { include_inactive: false } })
         ])
         employees.value = empsRes.data
         mapCompanyToForm(companyRes.data)

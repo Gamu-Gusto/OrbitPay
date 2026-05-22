@@ -4,7 +4,7 @@ from calendar import monthrange
 from datetime import date
 from typing import List, Tuple
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -101,13 +101,17 @@ def list_employees(
     company_id: int,
     skip: int = 0,
     limit: int = 100,
+    include_inactive: bool = Query(False),
     db: Session = Depends(get_db),
     user: User = Depends(require_permission("VIEW_EMPLOYEES")),
 ):
     if not db.get(Company, company_id):
         raise HTTPException(status_code=404, detail="Company not found")
     get_company(company_id, db, user)
-    employees = db.query(Employee).filter(Employee.company_id == company_id).offset(skip).limit(limit).all()
+    q = db.query(Employee).filter(Employee.company_id == company_id)
+    if not include_inactive:
+        q = q.filter(Employee.is_active == True)
+    employees = q.offset(skip).limit(limit).all()
     return [_attach_user_info(e, db) for e in employees]
 
 
@@ -200,6 +204,35 @@ def deactivate_employee(
     )
     db.commit()
     return None
+
+
+@router.post("/employees/{employee_id}/restore", response_model=EmployeeRead)
+def restore_employee(
+    employee_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("DELETE_EMPLOYEE")),
+):
+    """Reactivate a previously archived employee and their linked user account."""
+    employee = db.get(Employee, employee_id)
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    get_company(employee.company_id, db, user)
+
+    employee.is_active = True
+    link = db.query(EmployeeUser).filter_by(employee_id=employee_id).first()
+    if link:
+        linked_user = db.get(User, link.user_id)
+        if linked_user:
+            linked_user.is_active = True
+
+    log_audit(
+        db, user.id, "employee.restored", "employee", employee_id,
+        {"name": f"{employee.first_names} {employee.last_name}"},
+        company_id=employee.company_id,
+    )
+    db.commit()
+    db.refresh(employee)
+    return _attach_user_info(employee, db)
 
 
 @router.get("/employees/{employee_id}/documents")
