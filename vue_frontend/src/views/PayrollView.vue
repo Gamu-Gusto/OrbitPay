@@ -1,397 +1,413 @@
 <template>
-  <div class="payroll-layout">
-    <div class="payroll-content">
-      <!-- Page Header -->
-      <div class="page-header">
-        <div class="header-left">
-          <h1 class="page-title">Payroll Processing</h1>
-          <div class="breadcrumb">
-            <span>Payroll</span>
-            <span class="separator">/</span>
-            <span>Process Pay Run</span>
-          </div>
-        </div>
-        <div class="header-right">
-          <button @click="calculatePayroll" :disabled="isCalculating" class="btn-primary">
-            <svg v-if="isCalculating" class="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            {{ isCalculating ? 'Calculating...' : 'Calculate Payroll' }}
-          </button>
-        </div>
+  <div class="view-content">
+
+    <!-- Page header -->
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">Payroll Processing</h1>
+        <p class="page-subtitle">Calculate and generate payslips for employees</p>
       </div>
-
-      <!-- Loading skeleton -->
-      <SkeletonTable v-if="loading" :rows="5" :cols="5" />
-
-      <!-- Metric Cards -->
-      <div class="metric-cards" v-if="calculatedData">
-        <MetricCard label="Gross Pay" :value="calculatedData.total_earnings" />
-        <MetricCard label="Deductions" :value="calculatedData.total_deductions" />
-        <MetricCard label="Net Pay" :value="calculatedData.net_pay" type="success" />
-      </div>
-
-      <!-- Tabs -->
-      <div class="tabs-underline">
-        <button v-for="tab in tabs" :key="tab.id" @click="activeTab = tab.id" class="tab-underline" :class="{ active: activeTab === tab.id }">
-          {{ tab.name }}
+      <div class="header-actions">
+        <button @click="calculatePayroll" :disabled="isCalculating" class="btn btn-primary">
+          <span v-if="isCalculating" class="spinner spinner-sm" style="border-top-color:#fff;border-color:rgba(255,255,255,0.3);border-top-color:#fff;"></span>
+          {{ isCalculating ? 'Calculating…' : 'Calculate Payroll' }}
         </button>
       </div>
+    </div>
 
-      <!-- Details Tab -->
-      <div v-if="activeTab === 'details'" class="fade-in tab-content">
-        <div class="form-layout">
-          <!-- Left Column - Forms -->
-          <div class="form-column">
-            <!-- Import Saved Company & Employee -->
-            <FormSection ref="sectionPayrun" title="Import Saved Company & Employee" icon="import">
-              <div class="form-row-3">
-                <div class="form-group span-2">
-                  <label class="form-label">Company</label>
-                  <select v-model.number="selectedCompanyId" @change="onCompanyChange" class="form-input">
-                    <option :value="0">Select company</option>
-                    <option v-for="c in companies" :key="c.id" :value="c.id">{{ c.name }}</option>
-                  </select>
-                </div>
-                <div class="form-group">
-                  <button @click="applyCompany" :disabled="!selectedCompanyId" class="btn-secondary w-full">Load Company</button>
-                </div>
-              </div>
-              <div class="form-row-3">
-                <div class="form-group span-2">
-                  <label class="form-label">Employee</label>
-                  <select v-model.number="selectedEmployeeId" class="form-input" :disabled="!selectedCompanyId || employees.length === 0">
-                    <option :value="0">Select employee</option>
-                    <option v-for="e in employees" :key="e.id" :value="e.id">{{ e.first_names }} {{ e.last_name }}</option>
-                  </select>
-                </div>
-                <div class="form-group">
-                  <button @click="applyEmployee" :disabled="!selectedEmployeeId" class="btn-secondary w-full">Load Employee</button>
-                </div>
-              </div>
-            </FormSection>
-
-            <!-- Employee Details Card -->
-            <FormSection ref="sectionEmployees" title="Employee Details" icon="user">
-              <div class="form-group">
-                <label class="form-label">First Names</label>
-                <input v-model="formData.employee.first_names" type="text" class="form-input" placeholder="Enter first names" />
-              </div>
-              <div class="form-group">
-                <label class="form-label">Last Name</label>
-                <input v-model="formData.employee.last_name" type="text" class="form-input" placeholder="Enter last name" />
-              </div>
-              <div class="form-group">
-                <label class="form-label">ID/Passport No.</label>
-                <input v-model="formData.employee.id_no" type="text" class="form-input" placeholder="Enter ID or passport number" />
-              </div>
-              <div class="form-group">
-                <label class="form-label">Employee No.</label>
-                <input v-model="formData.employee.employee_no" type="text" class="form-input" placeholder="Enter employee number" />
-              </div>
-              <div class="form-group">
-                <label class="form-label">Position</label>
-                <input v-model="formData.employee.position" type="text" class="form-input" placeholder="Enter position" />
-              </div>
-              <div class="form-group">
-                <label class="form-label">Tax Reference</label>
-                <input v-model="formData.employee.tax_ref" type="text" class="form-input" placeholder="Enter tax reference" />
-              </div>
-              <div class="form-group span-2">
-                <label class="form-label">Employment Date</label>
-                <input v-model="formData.employee.emp_date" type="date" class="form-input" />
-              </div>
-            </FormSection>
-
-            <!-- Pay Period Card -->
-            <FormSection ref="sectionEarnings" title="Earnings" icon="money">
-              <div class="form-group">
-                <label class="form-label">Period Start</label>
-                <input v-model="formData.period_start" type="date" class="form-input" />
-              </div>
-              <div class="form-group">
-                <label class="form-label">Period End</label>
-                <input v-model="formData.period_end" type="date" class="form-input" />
-              </div>
-              <div class="form-group">
-                <label class="form-label">Payment Date</label>
-                <input v-model="formData.payment_date" type="date" class="form-input" />
-              </div>
-            </FormSection>
-
-            <!-- Calculation Mode Toggle -->
-            <FormSection ref="sectionDeductions" title="Deductions" icon="calculator">
-              <div class="form-group span-2">
-                <p class="text-sm text-muted mb-3">{{ isReverseMode ? 'Calculate gross salary from desired net pay' : 'Calculate net pay from gross salary' }}</p>
-                <div class="flex items-center gap-3">
-                  <span class="text-sm" :class="!isReverseMode ? 'text-base font-medium' : 'text-muted'">Normal</span>
-                  <button @click="toggleCalculationMode" class="toggle-switch" :class="{ active: isReverseMode }">
-                    <span class="toggle-thumb" :class="{ active: isReverseMode }"></span>
-                  </button>
-                  <span class="text-sm" :class="isReverseMode ? 'text-base font-medium' : 'text-muted'">Reverse</span>
-                </div>
-                <div v-if="isReverseMode" class="info-box info-blue mt-3">
-                  <p class="text-sm"><strong>Reverse Calculation Mode:</strong> Enter the desired net pay amount. The system will calculate the required gross salary to achieve this net amount after all deductions.</p>
-                </div>
-              </div>
-            </FormSection>
-
-            <!-- Earnings Card -->
-            <FormSection :title="isReverseMode ? 'Net Pay Target' : 'Earnings (Monthly)'" icon="money">
-              <div class="form-group" v-if="!isReverseMode">
-                <label class="form-label">Basic Pay</label>
-                <input v-model.number="formData.basic_pay" type="number" step="0.01" min="0" class="form-input" placeholder="0.00" />
-              </div>
-              <div class="form-group" v-if="isReverseMode">
-                <label class="form-label">Target Net Pay</label>
-                <input v-model.number="formData.target_net_pay" type="number" step="0.01" min="0" class="form-input" placeholder="0.00" />
-              </div>
-              <div class="form-group">
-                <label class="form-label">Other Earnings</label>
-                <input v-model.number="formData.other_earnings" type="number" step="0.01" min="0" class="form-input" placeholder="0.00" />
-              </div>
-            </FormSection>
-
-            <!-- Deductions Card -->
-            <FormSection title="Deductions (Monthly)" icon="document">
-              <div class="form-group">
-                <label class="form-label">Pension/Retirement</label>
-                <input v-model.number="formData.pension" type="number" step="0.01" min="0" class="form-input" placeholder="0.00" />
-              </div>
-              <div class="form-group">
-                <label class="form-label">Medical Aid</label>
-                <input v-model.number="formData.medical" type="number" step="0.01" min="0" class="form-input" placeholder="0.00" />
-              </div>
-            </FormSection>
-
-            <!-- SDL Calculation Card -->
-            <FormSection ref="sectionSdl" title="Skills Development Levy (SDL)" icon="calculator">
-              <div class="form-group">
-                <label class="form-label">Annual Payroll</label>
-                <input v-model.number="formData.annual_payroll" type="number" step="0.01" min="0" class="form-input" placeholder="0.00" />
-                <p class="hint-text">Total annual payroll for SDL threshold check (R500,000+)</p>
-              </div>
-              <div class="form-group">
-                <label class="form-label">Excluded Amounts</label>
-                <input v-model.number="formData.excluded_amounts" type="number" step="0.01" min="0" class="form-input" placeholder="0.00" />
-                <p class="hint-text">Reimbursements, non-taxable allowances, retirement contributions</p>
-              </div>
-              <div class="form-group span-2">
-                <div class="info-box info-blue">
-                  <p class="text-sm"><strong>SDL Information:</strong> SDL is calculated at 1% of total remuneration, but only applies if your annual payroll exceeds R500,000.</p>
-                </div>
-              </div>
-            </FormSection>
-
-            <!-- Leave Income Card -->
-            <FormSection title="Leave Income" icon="calendar">
-              <div class="form-group">
-                <label class="form-label">Leave Days Taken</label>
-                <input v-model.number="formData.leave_days_taken" type="number" min="0" max="31" class="form-input" placeholder="0" />
-                <p class="hint-text">Number of leave days taken in this period</p>
-              </div>
-              <div class="form-group">
-                <label class="form-label">Total Leave Days Available</label>
-                <input v-model.number="formData.total_leave_days_available" type="number" min="0" max="31" class="form-input" placeholder="21" />
-                <p class="hint-text">Annual leave days available (default: 21 as per BCEA)</p>
-              </div>
-              <div class="form-group span-2">
-                <div class="info-box info-green">
-                  <p class="text-sm"><strong>Leave Income Calculation:</strong> Leave income is calculated based on daily rates from annual salary. Only paid leave days within available limits are included.</p>
-                </div>
-              </div>
-            </FormSection>
-
-            <!-- Company Details Card -->
-            <FormSection ref="sectionPeriods" title="Company Details" icon="building">
-              <div class="form-group">
-                <label class="form-label">Company Name</label>
-                <input v-model="formData.company.company_name" type="text" class="form-input" placeholder="Enter company name" />
-              </div>
-              <div class="form-group">
-                <label class="form-label">Registration No.</label>
-                <input v-model="formData.company.company_reg_no" type="text" class="form-input" placeholder="Enter registration number" />
-              </div>
-              <div class="form-group span-2">
-                <label class="form-label">Address</label>
-                <textarea v-model="formData.company.company_address" rows="2" class="form-input" placeholder="Enter company address"></textarea>
-              </div>
-              <div class="form-group">
-                <label class="form-label">UIF Reference</label>
-                <input v-model="formData.company.uif_ref" type="text" class="form-input" placeholder="UIF reference" />
-              </div>
-              <div class="form-group">
-                <label class="form-label">Phone</label>
-                <input v-model="formData.company.phone" type="tel" class="form-input" placeholder="Phone number" />
-              </div>
-              <div class="form-group">
-                <label class="form-label">Email</label>
-                <input v-model="formData.company.email" type="email" class="form-input" placeholder="Email address" />
-              </div>
-              <div class="form-group span-2">
-                <label class="form-label">Run (e.g., June - 2025)</label>
-                <input v-model="formData.company.run" type="text" class="form-input" placeholder="Enter payroll run identifier" />
-              </div>
-            </FormSection>
-          </div>
-
-          <!-- Right Column - Summary & Actions -->
-          <div class="summary-column">
-            <div class="summary-card sticky">
-              <h3 class="summary-title">Payroll Summary</h3>
-              
-              <div v-if="calculatedData" class="summary-content">
-                <div class="summary-item success">
-                  <span class="label">Total Earnings</span>
-                  <span class="value">R{{ formatCurrency(calculatedData.total_earnings) }}</span>
-                </div>
-                <div class="summary-item error">
-                  <span class="label">Total Deductions</span>
-                  <span class="value">R{{ formatCurrency(calculatedData.total_deductions) }}</span>
-                </div>
-                <div class="summary-item primary">
-                  <span class="label">Net Pay</span>
-                  <span class="value large">R{{ formatCurrency(calculatedData.net_pay) }}</span>
-                </div>
-                <div class="detail-breakdown" v-if="calculatedData.paye || calculatedData.uif">
-                  <div class="detail-row"><span>PAYE:</span><span>R{{ formatCurrency(calculatedData.paye) }}</span></div>
-                  <div class="detail-row"><span>UIF:</span><span>R{{ formatCurrency(calculatedData.uif) }}</span></div>
-                  <div class="detail-row"><span>Pension:</span><span>R{{ formatCurrency(formData.pension) }}</span></div>
-                  <div class="detail-row"><span>Medical:</span><span>R{{ formatCurrency(formData.medical) }}</span></div>
-                </div>
-              </div>
-
-              <div v-else class="summary-empty">
-                <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
-                </svg>
-                <p>Enter payroll details to see calculations</p>
-              </div>
-
-              <!-- Action Buttons -->
-              <div class="action-buttons">
-                <div v-if="auth.roles.includes('manager') && selectedCompanyId && calculatedData" class="approval-row">
-                  <button @click="approveRun" class="btn-secondary flex-1">Approve Run</button>
-                  <button @click="rejectRun" class="btn-secondary flex-1">Reject Run</button>
-                </div>
-                <button @click="generatePayslip" :disabled="!calculatedData || isGeneratingPDF" class="btn-secondary w-full">
-                  <svg v-if="isGeneratingPDF" class="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  {{ isGeneratingPDF ? 'Generating...' : 'Generate Payslip PDF' }}
-                </button>
-                <template v-if="calculatedData?.record_id">
-                  <div v-if="distributeStatus === 'distributed'" class="distribute-badge">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-                    Distributed to portal
-                  </div>
-                  <button v-else @click="distributeOne" :disabled="distributing" class="btn-secondary w-full">
-                    {{ distributing ? 'Distributing…' : 'Distribute to Employee Portal' }}
-                  </button>
-                  <p v-if="distributeError" class="distribute-warn">{{ distributeError }}</p>
-                </template>
-              </div>
-            </div>
-          </div>
-        </div>
+    <!-- Company + Employee selectors -->
+    <div class="filters-bar">
+      <div class="form-group" style="min-width:220px;">
+        <label class="form-label">Company</label>
+        <select v-model.number="selectedCompanyId" @change="onCompanyChange" class="form-input">
+          <option :value="0">Select company…</option>
+          <option v-for="c in companies" :key="c.id" :value="c.id">{{ c.name }}</option>
+        </select>
       </div>
-
-      <!-- Summary Tab -->
-      <div v-if="activeTab === 'summary'" class="fade-in tab-content">
-        <div class="summary-tab-content">
-          <div v-if="calculatedData" class="summary-results">
-            <!-- Reverse Calculation Result -->
-            <div v-if="isReverseMode && calculatedData.calculated_gross_pay" class="reverse-result">
-              <h3>Reverse Calculation Result</h3>
-              <div class="result-grid">
-                <div class="result-item">
-                  <p class="label">Target Net Pay</p>
-                  <p class="value">R{{ formatCurrency(formData.target_net_pay) }}</p>
-                </div>
-                <div class="result-item highlight">
-                  <p class="label">Calculated Gross Pay</p>
-                  <p class="value">R{{ formatCurrency(calculatedData.calculated_gross_pay) }}</p>
-                </div>
-              </div>
-              <p class="result-note">To achieve a net pay of R{{ formatCurrency(formData.target_net_pay) }}, the employee needs a gross salary of R{{ formatCurrency(calculatedData.calculated_gross_pay) }}.</p>
-            </div>
-
-            <!-- Detailed Breakdown -->
-            <div class="breakdown-grid">
-              <!-- Earnings Breakdown -->
-              <div class="breakdown-card">
-                <h3>Earnings Breakdown</h3>
-                <div class="breakdown-list">
-                  <div v-for="[description, amount] in calculatedData.earnings" :key="description" class="breakdown-row">
-                    <span>{{ description }}</span>
-                    <span class="value">R{{ formatCurrency(amount) }}</span>
-                  </div>
-                  <div class="breakdown-total">
-                    <span>Total Earnings</span>
-                    <span class="value">R{{ formatCurrency(calculatedData.total_earnings) }}</span>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Deductions Breakdown -->
-              <div class="breakdown-card">
-                <h3>Deductions Breakdown</h3>
-                <div class="breakdown-list">
-                  <div v-for="[description, amount] in calculatedData.deductions" :key="description" class="breakdown-row">
-                    <span>{{ description }}</span>
-                    <span class="value">R{{ formatCurrency(amount) }}</span>
-                  </div>
-                  <div class="breakdown-total">
-                    <span>Total Deductions</span>
-                    <span class="value">R{{ formatCurrency(calculatedData.total_deductions) }}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Net Pay Summary -->
-            <div class="net-pay-summary">
-              <h3>Net Pay</h3>
-              <p class="net-pay-value">R{{ formatCurrency(calculatedData.net_pay) }}</p>
-              <p class="net-pay-employee">For {{ formData.employee.first_names }} {{ formData.employee.last_name }}</p>
-              <p class="net-pay-period">Pay period: {{ formatDate(formData.period_start) }} to {{ formatDate(formData.period_end) }}</p>
-            </div>
-
-            <!-- SDL Details -->
-            <div v-if="calculatedData.sdl_details && calculatedData.sdl > 0" class="sdl-details">
-              <h3>SDL Details</h3>
-              <div class="sdl-grid">
-                <div class="sdl-item"><span>Total Remuneration:</span><span>R{{ formatCurrency(calculatedData.sdl_details.total_remuneration) }}</span></div>
-                <div class="sdl-item"><span>SDL Rate:</span><span>{{ calculatedData.sdl_details.sdl_rate }}</span></div>
-                <div class="sdl-item"><span>SDL Amount:</span><span>R{{ formatCurrency(calculatedData.sdl) }}</span></div>
-              </div>
-            </div>
-
-            <!-- Leave Income Details -->
-            <div v-if="calculatedData.leave_income_details && calculatedData.leave_income > 0" class="leave-details">
-              <h3>Leave Income Details</h3>
-              <div class="leave-grid">
-                <div class="leave-item"><span>Annual Salary:</span><span>R{{ formatCurrency(calculatedData.leave_income_details.annual_salary) }}</span></div>
-                <div class="leave-item"><span>Daily Rate:</span><span>R{{ formatCurrency(calculatedData.leave_income_details.daily_rate) }}</span></div>
-                <div class="leave-item"><span>Leave Days:</span><span>{{ calculatedData.leave_income_details.leave_days_taken }} / {{ calculatedData.leave_income_details.total_leave_days_available }}</span></div>
-                <div class="leave-item"><span>Leave Income:</span><span>R{{ formatCurrency(calculatedData.leave_income) }}</span></div>
-              </div>
-            </div>
-          </div>
-
-          <div v-else class="summary-empty-state">
-            <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
-            </svg>
-            <h3>No calculations available</h3>
-            <p>Please go to the Details tab and calculate payroll first.</p>
-            <button @click="activeTab = 'details'" class="btn-primary">Go to Details</button>
-          </div>
-        </div>
+      <div class="form-group" style="min-width:220px;">
+        <label class="form-label">Employee</label>
+        <select v-model.number="selectedEmployeeId" class="form-input" :disabled="!selectedCompanyId || employees.length === 0">
+          <option :value="0">Select employee…</option>
+          <option v-for="e in employees" :key="e.id" :value="e.id">{{ e.first_names }} {{ e.last_name }}</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:8px;align-items:flex-end;padding-bottom:1px;">
+        <button @click="applyCompany" :disabled="!selectedCompanyId" class="btn btn-secondary btn-sm">Load Company</button>
+        <button @click="applyEmployee" :disabled="!selectedEmployeeId" class="btn btn-secondary btn-sm">Load Employee</button>
       </div>
     </div>
+
+    <!-- Tabs -->
+    <div class="tabs-underline">
+      <button
+        v-for="tab in tabs" :key="tab.id"
+        @click="activeTab = tab.id"
+        class="tab-underline"
+        :class="{ active: activeTab === tab.id }"
+      >{{ tab.name }}</button>
+    </div>
+
+    <!-- Loading skeleton -->
+    <SkeletonTable v-if="loading" :rows="5" :cols="5" />
+
+    <!-- ───── Details & Payslip tab ───── -->
+    <div v-else-if="activeTab === 'details'" class="fade-in details-layout">
+
+      <!-- Left: forms -->
+      <div class="form-col">
+
+        <!-- Employee Details -->
+        <div class="card card-sm">
+          <div class="card-header">
+            <span class="card-title">Employee Details</span>
+          </div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">First Names</label>
+              <input v-model="formData.employee.first_names" type="text" class="form-input" placeholder="Jane" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Last Name</label>
+              <input v-model="formData.employee.last_name" type="text" class="form-input" placeholder="Doe" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">ID / Passport No.</label>
+              <input v-model="formData.employee.id_no" type="text" class="form-input" placeholder="9001010001088" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Employee No.</label>
+              <input v-model="formData.employee.employee_no" type="text" class="form-input" placeholder="EMP001" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Position</label>
+              <input v-model="formData.employee.position" type="text" class="form-input" placeholder="Software Developer" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Tax Reference</label>
+              <input v-model="formData.employee.tax_ref" type="text" class="form-input" placeholder="1234567890" />
+            </div>
+            <div class="form-group span-2">
+              <label class="form-label">Employment Date</label>
+              <input v-model="formData.employee.emp_date" type="date" class="form-input" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Pay Period -->
+        <div class="card card-sm">
+          <div class="card-header">
+            <span class="card-title">Pay Period</span>
+          </div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Period Start</label>
+              <input v-model="formData.period_start" type="date" class="form-input" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Period End</label>
+              <input v-model="formData.period_end" type="date" class="form-input" />
+            </div>
+            <div class="form-group span-2">
+              <label class="form-label">Payment Date</label>
+              <input v-model="formData.payment_date" type="date" class="form-input" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Calculation Mode + Earnings -->
+        <div class="card card-sm">
+          <div class="card-header">
+            <span class="card-title">{{ isReverseMode ? 'Net Pay Target' : 'Earnings (Monthly)' }}</span>
+            <div class="calc-mode-toggle">
+              <span class="form-label" :style="!isReverseMode ? 'color:var(--color-text-base);font-weight:600;' : ''">Normal</span>
+              <button @click="toggleCalculationMode" class="toggle-btn-switch" :class="{ active: isReverseMode }" type="button">
+                <span class="toggle-thumb-switch" :class="{ active: isReverseMode }"></span>
+              </button>
+              <span class="form-label" :style="isReverseMode ? 'color:var(--color-text-base);font-weight:600;' : ''">Reverse</span>
+            </div>
+          </div>
+          <div v-if="isReverseMode" class="info-box info-blue" style="margin-bottom:14px;font-size:12px;">
+            Enter the desired net pay. The system will work backwards to find the required gross salary.
+          </div>
+          <div class="form-grid">
+            <div class="form-group" v-if="!isReverseMode">
+              <label class="form-label">Basic Pay</label>
+              <input v-model.number="formData.basic_pay" type="number" step="0.01" min="0" class="form-input" placeholder="0.00" />
+            </div>
+            <div class="form-group" v-if="isReverseMode">
+              <label class="form-label">Target Net Pay</label>
+              <input v-model.number="formData.target_net_pay" type="number" step="0.01" min="0" class="form-input" placeholder="0.00" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Other Earnings</label>
+              <input v-model.number="formData.other_earnings" type="number" step="0.01" min="0" class="form-input" placeholder="0.00" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Deductions -->
+        <div class="card card-sm">
+          <div class="card-header">
+            <span class="card-title">Deductions (Monthly)</span>
+          </div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Pension / Retirement</label>
+              <input v-model.number="formData.pension" type="number" step="0.01" min="0" class="form-input" placeholder="0.00" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Medical Aid</label>
+              <input v-model.number="formData.medical" type="number" step="0.01" min="0" class="form-input" placeholder="0.00" />
+            </div>
+          </div>
+        </div>
+
+        <!-- SDL -->
+        <div class="card card-sm">
+          <div class="card-header">
+            <span class="card-title">Skills Development Levy (SDL)</span>
+          </div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Annual Payroll</label>
+              <input v-model.number="formData.annual_payroll" type="number" step="0.01" min="0" class="form-input" placeholder="0.00" />
+              <span class="form-hint">SDL applies if annual payroll ≥ R500,000</span>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Excluded Amounts</label>
+              <input v-model.number="formData.excluded_amounts" type="number" step="0.01" min="0" class="form-input" placeholder="0.00" />
+              <span class="form-hint">Reimbursements, non-taxable allowances</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Leave Income -->
+        <div class="card card-sm">
+          <div class="card-header">
+            <span class="card-title">Leave Income</span>
+          </div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Leave Days Taken</label>
+              <input v-model.number="formData.leave_days_taken" type="number" min="0" max="31" class="form-input" placeholder="0" />
+              <span class="form-hint">Days taken in this pay period</span>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Total Leave Days Available</label>
+              <input v-model.number="formData.total_leave_days_available" type="number" min="0" max="365" class="form-input" placeholder="21" />
+              <span class="form-hint">Annual entitlement (BCEA default: 21)</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Company Details -->
+        <div class="card card-sm">
+          <div class="card-header">
+            <span class="card-title">Company Details</span>
+          </div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Company Name</label>
+              <input v-model="formData.company.company_name" type="text" class="form-input" placeholder="Company name" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Registration No.</label>
+              <input v-model="formData.company.company_reg_no" type="text" class="form-input" placeholder="2023/123456/07" />
+            </div>
+            <div class="form-group span-2">
+              <label class="form-label">Address</label>
+              <textarea v-model="formData.company.company_address" rows="2" class="form-input" placeholder="Company address"></textarea>
+            </div>
+            <div class="form-group">
+              <label class="form-label">UIF Reference</label>
+              <input v-model="formData.company.uif_ref" type="text" class="form-input" placeholder="UIF reference" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Phone</label>
+              <input v-model="formData.company.phone" type="tel" class="form-input" placeholder="012 345 6789" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Email</label>
+              <input v-model="formData.company.email" type="email" class="form-input" placeholder="info@company.co.za" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Run Identifier</label>
+              <input v-model="formData.company.run" type="text" class="form-input" placeholder="e.g. June - 2025" />
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Right: sticky summary -->
+      <div class="summary-col">
+        <div class="summary-card">
+          <p class="section-label" style="margin-bottom:14px;">Payroll Summary</p>
+
+          <div v-if="calculatedData" class="summary-body">
+            <div class="summary-row summary-row--success">
+              <span>Total Earnings</span>
+              <span>R{{ formatCurrency(calculatedData.total_earnings) }}</span>
+            </div>
+            <div class="summary-row summary-row--danger">
+              <span>Total Deductions</span>
+              <span>R{{ formatCurrency(calculatedData.total_deductions) }}</span>
+            </div>
+            <div class="summary-row summary-row--primary">
+              <span>Net Pay</span>
+              <span class="summary-net">R{{ formatCurrency(calculatedData.net_pay) }}</span>
+            </div>
+
+            <div v-if="calculatedData.paye || calculatedData.uif" class="summary-breakdown">
+              <div class="breakdown-row"><span>PAYE</span><span>R{{ formatCurrency(calculatedData.paye) }}</span></div>
+              <div class="breakdown-row"><span>UIF</span><span>R{{ formatCurrency(calculatedData.uif) }}</span></div>
+              <div class="breakdown-row"><span>Pension</span><span>R{{ formatCurrency(formData.pension) }}</span></div>
+              <div class="breakdown-row"><span>Medical Aid</span><span>R{{ formatCurrency(formData.medical) }}</span></div>
+            </div>
+          </div>
+
+          <div v-else class="summary-empty">
+            <svg width="36" height="36" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+            </svg>
+            <p>Fill in payroll details, then click Calculate Payroll.</p>
+          </div>
+
+          <!-- Actions -->
+          <div class="summary-actions">
+            <div v-if="auth.roles.includes('manager') && selectedCompanyId && calculatedData" style="display:flex;gap:8px;">
+              <button @click="approveRun" class="btn btn-secondary" style="flex:1;">Approve Run</button>
+              <button @click="rejectRun" class="btn btn-secondary" style="flex:1;">Reject Run</button>
+            </div>
+
+            <button
+              @click="generatePayslip"
+              :disabled="!calculatedData || isGeneratingPDF"
+              class="btn btn-secondary w-full"
+            >
+              <span v-if="isGeneratingPDF" class="spinner spinner-sm"></span>
+              {{ isGeneratingPDF ? 'Generating…' : 'Download Payslip PDF' }}
+            </button>
+
+            <template v-if="calculatedData?.record_id">
+              <div v-if="distributeStatus === 'distributed'" class="distribute-badge">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                Distributed to portal
+              </div>
+              <button v-else @click="distributeOne" :disabled="distributing" class="btn btn-secondary w-full">
+                {{ distributing ? 'Distributing…' : 'Distribute to Employee Portal' }}
+              </button>
+              <p v-if="distributeError" style="font-size:12px;color:var(--color-error);margin:0;">{{ distributeError }}</p>
+            </template>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ───── Summary & Calculations tab ───── -->
+    <div v-else-if="activeTab === 'summary'" class="fade-in">
+
+      <div v-if="calculatedData" class="summary-tab">
+
+        <!-- Reverse calc banner -->
+        <div v-if="isReverseMode && calculatedData.calculated_gross_pay" class="card card-sm" style="border-color:var(--color-info-border);background:var(--color-info-bg);">
+          <p class="section-label" style="color:#1e40af;margin-bottom:10px;">Reverse Calculation Result</p>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:12px;">
+            <div class="result-cell">
+              <div class="result-cell__label">Target Net Pay</div>
+              <div class="result-cell__value">R{{ formatCurrency(formData.target_net_pay) }}</div>
+            </div>
+            <div class="result-cell result-cell--highlight">
+              <div class="result-cell__label">Required Gross Pay</div>
+              <div class="result-cell__value">R{{ formatCurrency(calculatedData.calculated_gross_pay) }}</div>
+            </div>
+          </div>
+          <p style="font-size:12px;color:#1e40af;">
+            To achieve a net pay of R{{ formatCurrency(formData.target_net_pay) }}, the gross salary must be R{{ formatCurrency(calculatedData.calculated_gross_pay) }}.
+          </p>
+        </div>
+
+        <!-- Earnings / Deductions breakdown -->
+        <div class="breakdown-grid">
+          <div class="card card-sm">
+            <div class="card-header"><span class="card-title">Earnings Breakdown</span></div>
+            <div class="breakdown-list">
+              <div v-for="[desc, amt] in calculatedData.earnings" :key="desc" class="breakdown-row">
+                <span>{{ desc }}</span>
+                <span style="font-weight:500;color:#15803d;">R{{ formatCurrency(amt) }}</span>
+              </div>
+            </div>
+            <div class="breakdown-total">
+              <span>Total Earnings</span>
+              <span>R{{ formatCurrency(calculatedData.total_earnings) }}</span>
+            </div>
+          </div>
+
+          <div class="card card-sm">
+            <div class="card-header"><span class="card-title">Deductions Breakdown</span></div>
+            <div class="breakdown-list">
+              <div v-for="[desc, amt] in calculatedData.deductions" :key="desc" class="breakdown-row">
+                <span>{{ desc }}</span>
+                <span style="font-weight:500;color:#dc2626;">R{{ formatCurrency(amt) }}</span>
+              </div>
+            </div>
+            <div class="breakdown-total">
+              <span>Total Deductions</span>
+              <span>R{{ formatCurrency(calculatedData.total_deductions) }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Net pay summary -->
+        <div class="card card-sm net-pay-card">
+          <div class="net-pay-amount">R{{ formatCurrency(calculatedData.net_pay) }}</div>
+          <div class="net-pay-label">Net Pay</div>
+          <div class="net-pay-meta">
+            {{ formData.employee.first_names }} {{ formData.employee.last_name }}
+            &nbsp;·&nbsp;
+            {{ formatDate(formData.period_start) }} to {{ formatDate(formData.period_end) }}
+          </div>
+        </div>
+
+        <!-- SDL details -->
+        <div v-if="calculatedData.sdl_details && calculatedData.sdl > 0" class="card card-sm">
+          <div class="card-header"><span class="card-title">SDL Details</span></div>
+          <div class="detail-pairs">
+            <div class="detail-pair"><span>Total Remuneration</span><span>R{{ formatCurrency(calculatedData.sdl_details.total_remuneration) }}</span></div>
+            <div class="detail-pair"><span>SDL Rate</span><span>{{ calculatedData.sdl_details.sdl_rate }}</span></div>
+            <div class="detail-pair"><span>SDL Amount</span><span>R{{ formatCurrency(calculatedData.sdl) }}</span></div>
+          </div>
+        </div>
+
+        <!-- Leave income details -->
+        <div v-if="calculatedData.leave_income_details && calculatedData.leave_income > 0" class="card card-sm">
+          <div class="card-header"><span class="card-title">Leave Income Details</span></div>
+          <div class="detail-pairs">
+            <div class="detail-pair"><span>Annual Salary</span><span>R{{ formatCurrency(calculatedData.leave_income_details.annual_salary) }}</span></div>
+            <div class="detail-pair"><span>Daily Rate</span><span>R{{ formatCurrency(calculatedData.leave_income_details.daily_rate) }}</span></div>
+            <div class="detail-pair"><span>Leave Days</span><span>{{ calculatedData.leave_income_details.leave_days_taken }} / {{ calculatedData.leave_income_details.total_leave_days_available }}</span></div>
+            <div class="detail-pair"><span>Leave Income</span><span>R{{ formatCurrency(calculatedData.leave_income) }}</span></div>
+          </div>
+        </div>
+
+      </div>
+
+      <div v-else class="card">
+        <div class="empty-state">
+          <svg class="empty-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+          </svg>
+          <p class="empty-title">No calculations yet</p>
+          <p>Go to the Details tab, fill in the payroll data, then click Calculate Payroll.</p>
+          <button @click="activeTab = 'details'" class="btn btn-primary btn-sm" style="margin-top:8px;">Go to Details</button>
+        </div>
+      </div>
+
+    </div>
+
   </div>
 </template>
 
@@ -405,20 +421,15 @@ import SkeletonTable from '../components/ui/SkeletonTable.vue'
 
 export default {
   name: 'PayrollView',
-  components: {
-    MetricCard,
-    FormSection,
-    SkeletonTable,
-  },
+  components: { MetricCard, FormSection, SkeletonTable },
   setup() {
-    const auth = useAuthStore()
-    const loading = ref(false)
-    const activeTab = ref('details')
-    const activeSection = ref('payrun')
-    const isCalculating = ref(false)
+    const auth            = useAuthStore()
+    const loading         = ref(false)
+    const activeTab       = ref('details')
+    const isCalculating   = ref(false)
     const isGeneratingPDF = ref(false)
-    const calculatedData = ref(null)
-    const isReverseMode = ref(false)
+    const calculatedData  = ref(null)
+    const isReverseMode   = ref(false)
 
     const tabs = [
       { id: 'details', name: 'Details & Payslip' },
@@ -428,33 +439,33 @@ export default {
     const formData = reactive({
       employee: {
         first_names: '',
-        last_name: '',
-        id_no: '',
+        last_name:   '',
+        id_no:       '',
         employee_no: '',
-        position: '',
-        tax_ref: '',
-        emp_date: new Date().toISOString().split('T')[0]
+        position:    '',
+        tax_ref:     '',
+        emp_date:    new Date().toISOString().split('T')[0]
       },
       company: {
-        company_name: 'OrbitPay',
-        company_reg_no: '',
+        company_name:    'OrbitPay',
+        company_reg_no:  '',
         company_address: '',
-        uif_ref: '',
-        phone: '',
-        email: '',
-        run: ''
+        uif_ref:         '',
+        phone:           '',
+        email:           '',
+        run:             ''
       },
-      period_start: new Date().toISOString().split('T')[0],
-      period_end: new Date().toISOString().split('T')[0],
-      payment_date: new Date().toISOString().split('T')[0],
-      basic_pay: 0,
-      other_earnings: 0,
-      pension: 0,
-      medical: 0,
-      target_net_pay: 0,
-      annual_payroll: 0,
-      excluded_amounts: 0,
-      leave_days_taken: 0,
+      period_start:              new Date().toISOString().split('T')[0],
+      period_end:                new Date().toISOString().split('T')[0],
+      payment_date:              new Date().toISOString().split('T')[0],
+      basic_pay:                 0,
+      other_earnings:            0,
+      pension:                   0,
+      medical:                   0,
+      target_net_pay:            0,
+      annual_payroll:            0,
+      excluded_amounts:          0,
+      leave_days_taken:          0,
       total_leave_days_available: 21
     })
 
@@ -463,46 +474,10 @@ export default {
       calculatedData.value = null
     }
 
-    const sectionPayrun = ref(null)
-    const sectionEmployees = ref(null)
-    const sectionPeriods = ref(null)
-    const sectionEarnings = ref(null)
-    const sectionDeductions = ref(null)
-    const sectionSdl = ref(null)
-
-    const handleSidebarNav = (section) => {
-      activeSection.value = section
-      
-      // Map sidebar sections to component refs
-      const sectionMap = {
-        'payrun': sectionPayrun,
-        'employees': sectionEmployees,
-        'periods': sectionPeriods,
-        'earnings': sectionEarnings,
-        'deductions': sectionDeductions,
-        'sdl': sectionSdl
-      }
-      
-      const targetRef = sectionMap[section]
-      if (targetRef?.value?.$el) {
-        // Switch to details tab if not already there
-        activeTab.value = 'details'
-        
-        // Scroll to the section with offset for fixed header
-        setTimeout(() => {
-          const element = targetRef.value.$el
-          const offset = 120 // Account for header + nav + some padding
-          const top = element.getBoundingClientRect().top + window.pageYOffset - offset
-          window.scrollTo({ top, behavior: 'smooth' })
-        }, 50)
-      }
-    }
-
-    // Import data from backend
-    const API = ''
-    const companies = ref([])
-    const employees = ref([])
-    const selectedCompanyId = ref(0)
+    const API              = ''
+    const companies        = ref([])
+    const employees        = ref([])
+    const selectedCompanyId  = ref(0)
     const selectedEmployeeId = ref(0)
 
     const loadCompanies = async () => {
@@ -554,85 +529,70 @@ export default {
     }
 
     const mapCompanyToForm = (c) => {
-      formData.company.company_name = c?.name || ''
-      formData.company.company_reg_no = c?.registration_number || ''
+      formData.company.company_name    = c?.name || ''
+      formData.company.company_reg_no  = c?.registration_number || ''
       formData.company.company_address = c?.address || ''
-      formData.company.uif_ref = c?.uif_reference || ''
-      formData.company.phone = c?.phone || ''
-      formData.company.email = c?.email || ''
+      formData.company.uif_ref         = c?.uif_reference || ''
+      formData.company.phone           = c?.phone || ''
+      formData.company.email           = c?.email || ''
     }
 
     const mapEmployeeToForm = (e) => {
       formData.employee.first_names = e?.first_names || ''
-      formData.employee.last_name = e?.last_name || ''
-      formData.employee.id_no = e?.id_no || ''
+      formData.employee.last_name   = e?.last_name || ''
+      formData.employee.id_no       = e?.id_no || ''
       formData.employee.employee_no = e?.employee_no || ''
-      formData.employee.position = e?.position || ''
-      formData.employee.tax_ref = e?.tax_ref || ''
-      formData.employee.emp_date = e?.emp_date || new Date().toISOString().split('T')[0]
-      formData.basic_pay = Number(e?.basic_salary ?? 0)
-      const allowancesTotal = Number(e?.housing_allowance ?? 0) + Number(e?.transport_allowance ?? 0) + Number(e?.meal_allowance ?? 0) + Number(e?.other_allowances ?? 0)
+      formData.employee.position    = e?.position || ''
+      formData.employee.tax_ref     = e?.tax_ref || ''
+      formData.employee.emp_date    = e?.emp_date || new Date().toISOString().split('T')[0]
+      formData.basic_pay     = Number(e?.basic_salary ?? 0)
+      const allowancesTotal  = Number(e?.housing_allowance ?? 0) + Number(e?.transport_allowance ?? 0) + Number(e?.meal_allowance ?? 0) + Number(e?.other_allowances ?? 0)
       formData.other_earnings = allowancesTotal || 0
       formData.pension = Number(e?.pension_contribution ?? 0)
       formData.medical = Number(e?.medical_aid ?? 0)
     }
 
-    const formatCurrency = (amount) => {
-      return new Intl.NumberFormat('en-ZA', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-      }).format(amount || 0)
-    }
+    const formatCurrency = (amount) => new Intl.NumberFormat('en-ZA', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(amount || 0)
 
-    const formatDate = (dateString) => {
-      return new Date(dateString).toLocaleDateString('en-ZA', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-      })
-    }
+    const formatDate = (dateString) => new Date(dateString).toLocaleDateString('en-ZA', {
+      year: 'numeric', month: 'long', day: 'numeric'
+    })
 
     const calculatePayroll = async () => {
       isCalculating.value = true
       distributeStatus.value = ''
-      distributeError.value = ''
+      distributeError.value  = ''
       try {
         let response
         if (isReverseMode.value) {
           const reverseData = {
-            employee: formData.employee,
-            company: formData.company,
+            employee:     formData.employee,
+            company:      formData.company,
             period_start: formData.period_start,
-            period_end: formData.period_end,
+            period_end:   formData.period_end,
             payment_date: formData.payment_date,
-            target_net_pay: formData.target_net_pay,
-            pension: formData.pension,
-            medical: formData.medical,
-            annual_payroll: formData.annual_payroll,
-            excluded_amounts: formData.excluded_amounts,
-            leave_days_taken: formData.leave_days_taken,
+            target_net_pay:             formData.target_net_pay,
+            pension:                    formData.pension,
+            medical:                    formData.medical,
+            annual_payroll:             formData.annual_payroll,
+            excluded_amounts:           formData.excluded_amounts,
+            leave_days_taken:           formData.leave_days_taken,
             total_leave_days_available: formData.total_leave_days_available
           }
           response = await axios.post('/calculate-reverse-payroll', reverseData)
-          const reverseResult = response.data
+          const r  = response.data
           calculatedData.value = {
-            employee: reverseResult.employee,
-            company: reverseResult.company,
-            period_start: reverseResult.period_start,
-            period_end: reverseResult.period_end,
-            payment_date: reverseResult.payment_date,
-            earnings: reverseResult.earnings,
-            total_earnings: reverseResult.total_earnings,
-            deductions: reverseResult.deductions,
-            total_deductions: reverseResult.total_deductions,
-            net_pay: reverseResult.net_pay,
-            paye: reverseResult.paye,
-            uif: reverseResult.uif,
-            calculated_gross_pay: reverseResult.calculated_gross_pay,
-            sdl: reverseResult.sdl,
-            leave_income: reverseResult.leave_income,
-            sdl_details: reverseResult.sdl_details,
-            leave_income_details: reverseResult.leave_income_details
+            employee: r.employee, company: r.company,
+            period_start: r.period_start, period_end: r.period_end, payment_date: r.payment_date,
+            earnings: r.earnings, total_earnings: r.total_earnings,
+            deductions: r.deductions, total_deductions: r.total_deductions,
+            net_pay: r.net_pay, paye: r.paye, uif: r.uif,
+            calculated_gross_pay: r.calculated_gross_pay,
+            sdl: r.sdl, leave_income: r.leave_income,
+            sdl_details: r.sdl_details, leave_income_details: r.leave_income_details
           }
         } else {
           response = await axios.post('/calculate-payroll', formData)
@@ -641,9 +601,7 @@ export default {
       } catch (error) {
         console.error('Error calculating payroll:', error)
         let detail = error?.response?.data?.detail || error.message || 'Unknown error'
-        if (Array.isArray(detail)) {
-          detail = detail.map(e => e.msg || e).join('\n')
-        }
+        if (Array.isArray(detail)) detail = detail.map(e => e.msg || e).join('\n')
         alert(`Error calculating payroll:\n${detail}`)
       } finally {
         isCalculating.value = false
@@ -653,35 +611,33 @@ export default {
     const approveRun = async () => {
       try {
         const { data: run } = await axios.post('/payroll-runs', {
-          company_id: selectedCompanyId.value,
+          company_id:   selectedCompanyId.value,
           period_start: formData.period_start,
-          period_end: formData.period_end
+          period_end:   formData.period_end
         })
         await axios.post(`/payroll-runs/${run.id}/approve`)
         alert('Run approved')
-      } catch (e) { alert('Approval failed') }
+      } catch { alert('Approval failed') }
     }
 
     const rejectRun = async () => {
       try {
         const { data: run } = await axios.post('/payroll-runs', {
-          company_id: selectedCompanyId.value,
+          company_id:   selectedCompanyId.value,
           period_start: formData.period_start,
-          period_end: formData.period_end
+          period_end:   formData.period_end
         })
         await axios.post(`/payroll-runs/${run.id}/reject`)
         alert('Run rejected')
-      } catch (e) { alert('Reject failed') }
+      } catch { alert('Reject failed') }
     }
 
     const generatePayslip = async () => {
       if (!calculatedData.value) return
       isGeneratingPDF.value = true
       try {
-        const response = await axios.post('/generate-payslip', calculatedData.value, {
-          responseType: 'blob'
-        })
-        const url = window.URL.createObjectURL(new Blob([response.data]))
+        const response = await axios.post('/generate-payslip', calculatedData.value, { responseType: 'blob' })
+        const url  = window.URL.createObjectURL(new Blob([response.data]))
         const link = document.createElement('a')
         link.href = url
         link.setAttribute('download', `payslip_${formData.employee.last_name}_${formData.employee.first_names}.pdf`)
@@ -697,421 +653,205 @@ export default {
       }
     }
 
-    const distributing = ref(false)
+    const distributing     = ref(false)
     const distributeStatus = ref('')
-    const distributeError = ref('')
+    const distributeError  = ref('')
 
     const distributeOne = async () => {
       if (!calculatedData.value?.record_id) return
-      distributing.value = true
+      distributing.value    = true
       distributeError.value = ''
       try {
         await axios.post(`/payroll-records/${calculatedData.value.record_id}/distribute`)
         distributeStatus.value = 'distributed'
       } catch (e) {
-        const detail = e?.response?.data?.detail || 'Distribution failed.'
-        distributeError.value = detail
+        distributeError.value = e?.response?.data?.detail || 'Distribution failed.'
       } finally {
         distributing.value = false
       }
     }
 
-    onMounted(() => {
-      loadCompanies()
-    })
+    onMounted(loadCompanies)
 
     return {
-      auth,
-      loading,
-      activeTab,
-      activeSection,
-      isCalculating,
-      isGeneratingPDF,
-      calculatedData,
-      isReverseMode,
-      tabs,
-      formData,
-      companies,
-      employees,
-      selectedCompanyId,
-      selectedEmployeeId,
-      onCompanyChange,
-      applyCompany,
-      applyEmployee,
-      approveRun,
-      rejectRun,
+      auth, loading, activeTab, isCalculating, isGeneratingPDF,
+      calculatedData, isReverseMode, tabs, formData,
+      companies, employees, selectedCompanyId, selectedEmployeeId,
+      onCompanyChange, applyCompany, applyEmployee,
       toggleCalculationMode,
-      handleSidebarNav,
-      formatCurrency,
-      formatDate,
-      calculatePayroll,
-      generatePayslip,
-      distributing, distributeStatus, distributeError, distributeOne,
+      formatCurrency, formatDate,
+      calculatePayroll, generatePayslip,
+      approveRun, rejectRun,
+      distributing, distributeStatus, distributeError, distributeOne
     }
   }
 }
 </script>
 
 <style scoped>
-.payroll-layout {
-  min-height: 100vh;
-  background-color: var(--color-bg-page);
-}
-
-.payroll-content {
+/* ── View layout ─────────────────────────────────────────────────────────── */
+.view-content {
   padding: 24px;
   max-width: 1280px;
-}
-
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 24px;
-}
-
-.header-left {
   display: flex;
   flex-direction: column;
+  gap: 20px;
 }
 
-.page-title {
-  font-size: 16px;
-  font-weight: 500;
-  color: var(--color-text-base);
-  margin-bottom: 4px;
-}
-
-.breadcrumb {
-  font-size: 11px;
-  color: var(--color-text-muted);
-}
-
-.breadcrumb .separator {
-  margin: 0 6px;
-}
-
-.metric-cards {
+.header-actions {
   display: flex;
-  gap: 16px;
-  margin-bottom: 24px;
-}
-
-.tab-content {
-  margin-top: 24px;
-}
-
-.form-layout {
-  display: grid;
-  grid-template-columns: 1fr 320px;
-  gap: 24px;
-}
-
-.form-column {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.form-row-3 {
-  display: grid;
-  grid-template-columns: 1fr 1fr 120px;
-  gap: 12px;
-  align-items: flex-end;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-}
-
-.form-group.span-2 {
-  grid-column: span 2;
-}
-
-.hint-text {
-  font-size: 11px;
-  color: var(--color-text-muted);
-  margin-top: 4px;
-}
-
-.text-muted {
-  color: var(--color-text-muted);
-}
-
-.text-base {
-  color: var(--color-text-base);
-}
-
-.font-medium {
-  font-weight: 500;
-}
-
-.flex {
-  display: flex;
-}
-
-.items-center {
+  gap: 8px;
   align-items: center;
 }
 
-.gap-3 {
+.filters-bar {
+  display: flex;
   gap: 12px;
+  align-items: flex-end;
+  flex-wrap: wrap;
 }
 
-.mt-3 {
-  margin-top: 12px;
+/* ── Two-column details layout ───────────────────────────────────────────── */
+.details-layout {
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  gap: 20px;
+  align-items: start;
 }
 
-.mb-3 {
-  margin-bottom: 12px;
+.form-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
-.info-box {
-  padding: 12px;
-  border-radius: 6px;
+/* ── Calculation mode toggle (inside card header) ────────────────────────── */
+.calc-mode-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.info-blue {
-  background-color: #eff6ff;
-  border: 1px solid #bfdbfe;
-}
-
-.info-green {
-  background-color: #f0fdf4;
-  border: 1px solid #bbf7d0;
-}
-
-.toggle-switch {
+.toggle-btn-switch {
   position: relative;
-  width: 44px;
-  height: 24px;
-  background-color: var(--color-border);
-  border-radius: 12px;
+  width: 38px;
+  height: 21px;
+  background: var(--color-border-input);
+  border-radius: 999px;
   border: none;
   cursor: pointer;
   padding: 0;
+  transition: background 0.2s;
+  flex-shrink: 0;
 }
+.toggle-btn-switch.active { background: var(--color-accent); }
 
-.toggle-switch.active {
-  background-color: var(--color-primary);
-}
-
-.toggle-thumb {
+.toggle-thumb-switch {
   position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 20px;
-  height: 20px;
-  background-color: white;
+  top: 3px; left: 3px;
+  width: 15px; height: 15px;
+  background: #fff;
   border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
   transition: transform 0.2s;
+  display: block;
 }
+.toggle-thumb-switch.active { transform: translateX(17px); }
 
-.toggle-thumb.active {
-  transform: translateX(20px);
-}
-
-.summary-column {
-  position: relative;
-}
+/* ── Summary card (sticky sidebar) ──────────────────────────────────────── */
+.summary-col { position: relative; }
 
 .summary-card {
-  background-color: var(--color-bg-card);
-  border: 0.5px solid var(--color-border);
-  border-radius: 12px;
+  position: sticky;
+  top: 24px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
   padding: 16px;
 }
 
-.summary-card.sticky {
-  position: sticky;
-  top: 24px;
-}
-
-.summary-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--color-text-base);
+.summary-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   margin-bottom: 16px;
 }
 
-.summary-content {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.summary-item {
+.summary-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px;
-  border-radius: 6px;
-}
-
-.summary-item.success {
-  background-color: #f0fdf4;
-}
-
-.summary-item.error {
-  background-color: #fef2f2;
-}
-
-.summary-item.primary {
-  background-color: #eff6ff;
-}
-
-.summary-item .label {
-  font-size: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
   font-weight: 500;
 }
+.summary-row--success { background: var(--color-success-bg); color: #065f46; }
+.summary-row--danger  { background: var(--color-error-bg);   color: #991b1b; }
+.summary-row--primary { background: var(--color-info-bg);    color: #1e40af; }
 
-.summary-item .value {
-  font-size: 14px;
-  font-weight: 600;
-}
+.summary-net { font-size: 17px; font-weight: 700; }
 
-.summary-item .value.large {
-  font-size: 18px;
-}
-
-.summary-item.success .label { color: #166534; }
-.summary-item.success .value { color: #15803d; }
-.summary-item.error .label { color: #991b1b; }
-.summary-item.error .value { color: #dc2626; }
-.summary-item.primary .label { color: #1e40af; }
-.summary-item.primary .value { color: #2563eb; }
-
-.detail-breakdown {
-  margin-top: 8px;
+.summary-breakdown {
   padding-top: 8px;
+  margin-top: 4px;
   border-top: 1px solid var(--color-border);
 }
 
-.detail-row {
+.breakdown-row {
   display: flex;
   justify-content: space-between;
-  font-size: 11px;
+  font-size: 11.5px;
   color: var(--color-text-muted);
-  padding: 2px 0;
+  padding: 3px 0;
 }
 
 .summary-empty {
   text-align: center;
-  padding: 32px 0;
+  padding: 24px 0;
   color: var(--color-text-muted);
-}
-
-.summary-empty .icon {
-  width: 48px;
-  height: 48px;
-  margin: 0 auto 12px;
-  color: var(--color-border);
-}
-
-.action-buttons {
-  margin-top: 16px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
 }
+.summary-empty svg { opacity: 0.3; }
+.summary-empty p { font-size: 12.5px; line-height: 1.5; max-width: 200px; }
 
-.approval-row {
+.summary-actions {
   display: flex;
+  flex-direction: column;
   gap: 8px;
+  border-top: 1px solid var(--color-border);
+  padding-top: 14px;
 }
 
 .distribute-badge {
-  display: flex; align-items: center; gap: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   padding: 8px 12px;
-  background: #dcfce7; border: 1px solid #86efac; border-radius: 7px;
-  font-size: 12.5px; font-weight: 600; color: #15803d;
+  background: var(--color-success-bg);
+  border: 1px solid var(--color-success-border);
+  border-radius: var(--radius-md);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #15803d;
 }
 
-.distribute-warn {
-  font-size: 12px; color: #dc2626; margin: 0;
-}
-
-.summary-tab-content {
-  max-width: 800px;
-}
-
-.summary-results {
+/* ── Summary tab layout ──────────────────────────────────────────────────── */
+.summary-tab {
   display: flex;
   flex-direction: column;
-  gap: 24px;
-}
-
-.reverse-result {
-  background-color: #eff6ff;
-  border: 1px solid #bfdbfe;
-  border-radius: 12px;
-  padding: 20px;
-}
-
-.reverse-result h3 {
-  font-size: 14px;
-  font-weight: 600;
-  color: #1e40af;
-  margin-bottom: 16px;
-}
-
-.result-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
   gap: 16px;
-  margin-bottom: 16px;
-}
-
-.result-item {
-  background-color: white;
-  border-radius: 8px;
-  padding: 16px;
-  text-align: center;
-}
-
-.result-item.highlight {
-  border: 2px solid #22c55e;
-}
-
-.result-item .label {
-  font-size: 11px;
-  color: var(--color-text-muted);
-  margin-bottom: 4px;
-}
-
-.result-item .value {
-  font-size: 20px;
-  font-weight: 600;
-  color: var(--color-text-base);
-}
-
-.result-note {
-  font-size: 13px;
-  color: #1e40af;
-  background-color: white;
-  padding: 12px;
-  border-radius: 6px;
+  max-width: 900px;
 }
 
 .breakdown-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 24px;
-}
-
-.breakdown-card {
-  background-color: var(--color-bg-card);
-  border: 0.5px solid var(--color-border);
-  border-radius: 12px;
-  padding: 16px;
-}
-
-.breakdown-card h3 {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--color-text-base);
-  margin-bottom: 16px;
+  gap: 16px;
 }
 
 .breakdown-list {
@@ -1127,161 +867,92 @@ export default {
   font-size: 13px;
 }
 
-.breakdown-row .value {
-  font-weight: 500;
-  color: #15803d;
-}
-
 .breakdown-total {
   display: flex;
   justify-content: space-between;
-  padding: 12px 0 0;
-  margin-top: 8px;
-  border-top: 2px solid #bbf7d0;
-  font-weight: 600;
-  font-size: 14px;
-}
-
-.breakdown-total .value {
-  color: #15803d;
-}
-
-.net-pay-summary {
-  background-color: var(--color-bg-card);
-  border: 0.5px solid var(--color-border);
-  border-radius: 12px;
-  padding: 24px;
-  text-align: center;
-}
-
-.net-pay-summary h3 {
-  font-size: 16px;
-  font-weight: 500;
-  color: var(--color-text-base);
-  margin-bottom: 8px;
-}
-
-.net-pay-value {
-  font-size: 32px;
-  font-weight: 600;
-  color: var(--color-primary);
-  margin-bottom: 8px;
-}
-
-.net-pay-employee {
+  padding: 10px 0 0;
+  margin-top: 4px;
   font-size: 13px;
-  color: var(--color-text-base);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  border-top: 2px solid var(--color-border);
+}
+
+/* ── Net pay hero ────────────────────────────────────────────────────────── */
+.net-pay-card {
+  text-align: center;
+  padding: 32px 24px;
+}
+.net-pay-amount {
+  font-size: 36px;
+  font-weight: 700;
+  color: var(--color-primary);
+  letter-spacing: -0.02em;
   margin-bottom: 4px;
 }
-
-.net-pay-period {
-  font-size: 11px;
+.net-pay-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+  margin-bottom: 10px;
+}
+.net-pay-meta {
+  font-size: 12px;
   color: var(--color-text-muted);
 }
 
-.sdl-details,
-.leave-details {
-  background-color: var(--color-bg-card);
-  border: 0.5px solid var(--color-border);
-  border-radius: 12px;
-  padding: 16px;
+/* ── Detail pairs (SDL / Leave details) ──────────────────────────────────── */
+.detail-pairs {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 }
-
-.sdl-details h3,
-.leave-details h3 {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--color-text-base);
-  margin-bottom: 16px;
-}
-
-.sdl-grid,
-.leave-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-
-.sdl-item,
-.leave-item {
+.detail-pair {
   display: flex;
   justify-content: space-between;
   font-size: 13px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--color-border);
 }
+.detail-pair:last-child { border-bottom: none; }
+.detail-pair span:first-child { color: var(--color-text-muted); }
+.detail-pair span:last-child  { font-weight: 500; }
 
-.sdl-item span:first-child,
-.leave-item span:first-child {
-  color: var(--color-text-muted);
-}
-
-.summary-empty-state {
+/* ── Reverse calc result cells ───────────────────────────────────────────── */
+.result-cell {
+  background: #fff;
+  border-radius: var(--radius-md);
+  padding: 16px;
   text-align: center;
-  padding: 48px;
-  background-color: var(--color-bg-card);
-  border: 0.5px solid var(--color-border);
-  border-radius: 12px;
 }
+.result-cell--highlight { border: 2px solid var(--color-success); }
+.result-cell__label { font-size: 11px; color: var(--color-text-muted); margin-bottom: 4px; }
+.result-cell__value { font-size: 20px; font-weight: 700; color: var(--color-text-primary); }
 
-.summary-empty-state .icon {
-  width: 64px;
-  height: 64px;
-  margin: 0 auto 16px;
-  color: var(--color-border);
-}
+/* ── span-2 helper for form-grid ─────────────────────────────────────────── */
+.span-2 { grid-column: span 2; }
 
-.summary-empty-state h3 {
-  font-size: 16px;
-  font-weight: 500;
-  color: var(--color-text-base);
-  margin-bottom: 8px;
-}
-
-.summary-empty-state p {
-  font-size: 13px;
-  color: var(--color-text-muted);
-  margin-bottom: 16px;
-}
-
+/* ── Responsive ──────────────────────────────────────────────────────────── */
 @media (max-width: 1024px) {
-  .form-layout {
+  .details-layout {
     grid-template-columns: 1fr;
   }
-  
-  .summary-column {
-    order: -1;
-  }
-  
-  .summary-card.sticky {
+  .summary-card {
     position: static;
   }
-  
-  .breakdown-grid,
-  .sdl-grid,
-  .leave-grid {
+  .summary-col {
+    order: -1;
+  }
+  .breakdown-grid {
     grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 640px) {
-  .main-content {
-    margin-left: 0;
-    padding: 16px;
-  }
-  
-  .payroll-layout {
-    flex-direction: column;
-  }
-  
-  .form-row-3 {
-    grid-template-columns: 1fr;
-  }
-  
-  .form-group.span-2 {
-    grid-column: span 1;
-  }
-  
-  .metric-cards {
-    flex-direction: column;
-  }
+  .view-content { padding: 16px; }
+  .filters-bar { flex-direction: column; align-items: stretch; }
+  .span-2 { grid-column: span 1; }
 }
 </style>

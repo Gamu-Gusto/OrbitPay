@@ -1,226 +1,253 @@
 <template>
-  <div class="dashboard-content">
+  <div class="dashboard">
 
-    <!-- Header -->
-    <div class="page-header">
+    <!-- Page header -->
+    <div class="dashboard-header">
       <div>
         <h1 class="page-title">Dashboard</h1>
-        <p class="page-sub">{{ greeting }}, {{ firstName }}. Here's what needs your attention.</p>
+        <p class="page-subtitle">{{ greeting }}, {{ firstName }}. Here's what needs your attention.</p>
       </div>
-      <div class="header-actions">
-        <router-link to="/payroll/bulk" class="btn-primary" v-if="hasRole(['super_admin','accountant'])">Run Payroll</router-link>
-      </div>
+      <router-link
+        v-if="hasRole(['super_admin', 'accountant'])"
+        to="/payroll/bulk"
+        class="btn btn-primary"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/>
+        </svg>
+        Run Payroll
+      </router-link>
     </div>
 
-    <!-- Loading -->
+    <!-- Skeleton while loading -->
     <SkeletonDashboard v-if="loading" />
 
     <template v-else>
-      <!-- Stat cards -->
+
+      <!-- ── Stat cards ─────────────────────────────────────── -->
       <div class="stats-grid">
+
+        <!-- Companies -->
         <div class="stat-card">
-          <div class="stat-icon blue">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              <path d="M3 21h18M3 7l9-4 9 4M4 7v14M20 7v14M9 21v-4a3 3 0 016 0v4"/>
-            </svg>
-          </div>
-          <div class="stat-body">
-            <span class="stat-val">{{ stats.companies }}</span>
-            <span class="stat-label">{{ stats.companies === 1 ? 'Company' : 'Companies' }}</span>
+          <div class="stat-value">{{ stats.companies ?? '—' }}</div>
+          <div class="stat-label">
+            {{ stats.companies === 1 ? 'Company' : 'Companies' }}
           </div>
         </div>
 
+        <!-- Active employees -->
         <div class="stat-card">
-          <div class="stat-icon green">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/>
-              <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/>
-            </svg>
-          </div>
-          <div class="stat-body">
-            <span class="stat-val">{{ stats.employees?.active }}</span>
-            <span class="stat-label">Active Employees</span>
-            <span class="stat-sub">{{ stats.employees?.inactive }} inactive</span>
-          </div>
+          <div class="stat-value">{{ stats.employees?.active ?? '—' }}</div>
+          <div class="stat-label">Active Employees</div>
+          <div class="stat-sub">{{ stats.employees?.inactive ?? 0 }} inactive</div>
         </div>
 
+        <!-- Payroll net pay -->
         <div class="stat-card">
-          <div class="stat-icon purple">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              <rect x="2" y="3" width="8" height="10" rx="1"/><rect x="14" y="3" width="8" height="6" rx="1"/>
-              <rect x="14" y="13" width="8" height="8" rx="1"/><rect x="2" y="17" width="8" height="4" rx="1"/>
-            </svg>
-          </div>
-          <div class="stat-body">
-            <span class="stat-val">R {{ fmtMoney(stats.current_month?.total_net_pay) }}</span>
-            <span class="stat-label">{{ stats.current_month?.period }} Net Payroll</span>
-            <span class="stat-sub">{{ stats.current_month?.employees_processed }} employees processed</span>
-          </div>
+          <div class="stat-value">R {{ fmtMoney(stats.current_month?.total_net_pay) }}</div>
+          <div class="stat-label">{{ stats.current_month?.period || 'This Month' }} Net Payroll</div>
+          <div class="stat-sub">{{ stats.current_month?.employees_processed ?? 0 }} employees processed</div>
         </div>
 
-        <div class="stat-card" :class="stats.pending_approvals > 0 ? 'card-warn' : ''">
-          <div class="stat-icon" :class="stats.pending_approvals > 0 ? 'orange' : 'gray'">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
-            </svg>
-          </div>
-          <div class="stat-body">
-            <span class="stat-val">{{ stats.pending_approvals }}</span>
-            <span class="stat-label">Pending Approvals</span>
-            <router-link v-if="stats.pending_approvals > 0" to="/payroll/bulk" class="stat-action">Review →</router-link>
-          </div>
+        <!-- Pending approvals — warning accent when > 0 -->
+        <div class="stat-card" :class="{ 'stat-card--warn': stats.pending_approvals > 0 }">
+          <div class="stat-value">{{ stats.pending_approvals ?? 0 }}</div>
+          <div class="stat-label">Pending Approvals</div>
+          <router-link
+            v-if="stats.pending_approvals > 0"
+            to="/payroll/bulk"
+            class="stat-link"
+          >Review &rarr;</router-link>
         </div>
+
       </div>
 
-      <!-- Approval Queue Cards (super_admin only) -->
+      <!-- ── Approval queue (super_admin only) ──────────────── -->
       <div v-if="hasRole(['super_admin'])" class="approvals-grid">
-        <router-link to="/approvals/leave" class="approval-card" :class="stats.pending_leave > 0 ? 'approval-card--active' : ''">
-          <div class="approval-icon" :class="stats.pending_leave > 0 ? 'orange' : 'gray'">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/>
-              <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
-            </svg>
-          </div>
-          <div class="approval-body">
+
+        <router-link
+          to="/approvals/leave"
+          class="approval-cell"
+          :class="{ 'approval-cell--active': stats.pending_leave > 0 }"
+        >
+          <div class="approval-cell-body">
             <span class="approval-count">{{ stats.pending_leave || 0 }}</span>
-            <span class="approval-label">Leave Requests Pending</span>
+            <span class="approval-label">Leave Requests</span>
           </div>
-          <span v-if="stats.pending_leave > 0" class="approval-arrow">→</span>
+          <svg v-if="stats.pending_leave > 0" class="approval-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M5 12h14M12 5l7 7-7 7"/>
+          </svg>
         </router-link>
 
-        <router-link to="/approvals/documents" class="approval-card" :class="stats.pending_documents > 0 ? 'approval-card--active' : ''">
-          <div class="approval-icon" :class="stats.pending_documents > 0 ? 'orange' : 'gray'">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/>
-              <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
-            </svg>
-          </div>
-          <div class="approval-body">
+        <router-link
+          to="/approvals/documents"
+          class="approval-cell"
+          :class="{ 'approval-cell--active': stats.pending_documents > 0 }"
+        >
+          <div class="approval-cell-body">
             <span class="approval-count">{{ stats.pending_documents || 0 }}</span>
             <span class="approval-label">Documents Pending</span>
           </div>
-          <span v-if="stats.pending_documents > 0" class="approval-arrow">→</span>
+          <svg v-if="stats.pending_documents > 0" class="approval-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M5 12h14M12 5l7 7-7 7"/>
+          </svg>
         </router-link>
 
-        <router-link to="/approvals/banking" class="approval-card" :class="stats.pending_banking > 0 ? 'approval-card--active' : ''">
-          <div class="approval-icon" :class="stats.pending_banking > 0 ? 'orange' : 'gray'">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              <rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/>
-            </svg>
-          </div>
-          <div class="approval-body">
+        <router-link
+          to="/approvals/banking"
+          class="approval-cell"
+          :class="{ 'approval-cell--active': stats.pending_banking > 0 }"
+        >
+          <div class="approval-cell-body">
             <span class="approval-count">{{ stats.pending_banking || 0 }}</span>
-            <span class="approval-label">Banking Changes Pending</span>
+            <span class="approval-label">Banking Changes</span>
           </div>
-          <span v-if="stats.pending_banking > 0" class="approval-arrow">→</span>
+          <svg v-if="stats.pending_banking > 0" class="approval-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M5 12h14M12 5l7 7-7 7"/>
+          </svg>
         </router-link>
+
       </div>
 
-      <!-- Quick Actions -->
-      <div class="quick-actions">
-        <h2 class="section-title">Quick Actions</h2>
+      <!-- ── Quick actions ───────────────────────────────────── -->
+      <div>
+        <p class="section-label" style="margin-bottom: var(--space-3);">Quick Actions</p>
         <div class="actions-row">
-          <router-link to="/payroll" class="action-btn">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              <path d="M12 5v14M5 12h14"/>
+
+          <router-link to="/payroll" class="btn btn-secondary">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--color-text-muted);">
+              <rect x="2" y="3" width="8" height="10" rx="1"/><rect x="14" y="3" width="8" height="6" rx="1"/>
+              <rect x="14" y="13" width="8" height="8" rx="1"/><rect x="2" y="17" width="8" height="4" rx="1"/>
             </svg>
             Single Payslip
           </router-link>
-          <router-link to="/payroll/bulk" v-if="hasRole(['super_admin','accountant'])" class="action-btn">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+
+          <router-link
+            v-if="hasRole(['super_admin', 'accountant'])"
+            to="/payroll/bulk"
+            class="btn btn-secondary"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--color-text-muted);">
               <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/>
               <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/>
             </svg>
             Run Bulk Payroll
           </router-link>
-          <router-link to="/companies" class="action-btn">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+
+          <router-link to="/companies" class="btn btn-secondary">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--color-text-muted);">
               <path d="M3 21h18M3 7l9-4 9 4M4 7v14M20 7v14M9 21v-4a3 3 0 016 0v4"/>
             </svg>
             Manage Companies
           </router-link>
-          <router-link to="/hr-reports" v-if="hasRole(['super_admin','accountant'])" class="action-btn">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+
+          <router-link
+            v-if="hasRole(['super_admin', 'accountant'])"
+            to="/hr-reports"
+            class="btn btn-secondary"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--color-text-muted);">
               <path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6m4 0h14M13 19v-10a2 2 0 00-2-2H9"/>
             </svg>
             HR Reports
           </router-link>
+
         </div>
       </div>
 
-      <!-- Recent document uploads -->
-      <div v-if="hasRole(['super_admin','accountant']) && recentDocUploads.length > 0" class="card doc-uploads-card">
-        <h2 class="section-title">
-          <svg class="title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/>
-            <line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/>
-          </svg>
-          Recent Document Uploads
-          <router-link to="/approvals/documents" class="view-all-inline">View all →</router-link>
-        </h2>
-        <div class="doc-upload-list">
-          <div v-for="n in recentDocUploads" :key="n.id" class="doc-upload-item">
-            <div class="doc-upload-body">
-              <p class="doc-upload-msg">{{ n.message }}</p>
-              <p class="doc-upload-time">{{ fmtTime(n.created_at) }}</p>
-            </div>
-            <router-link to="/approvals/documents" class="doc-upload-action">Review</router-link>
+      <!-- ── Recent document uploads ────────────────────────── -->
+      <div
+        v-if="hasRole(['super_admin', 'accountant']) && recentDocUploads.length > 0"
+        class="card card-sm"
+      >
+        <div class="doc-card-header">
+          <div class="doc-card-title">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--color-text-muted); flex-shrink: 0;">
+              <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/>
+            </svg>
+            Recent Document Uploads
           </div>
+          <router-link to="/approvals/documents" class="btn-text" style="font-size: var(--text-sm);">
+            View all &rarr;
+          </router-link>
         </div>
+
+        <ul class="doc-list" role="list">
+          <li
+            v-for="n in recentDocUploads"
+            :key="n.id"
+            class="doc-row"
+          >
+            <div class="doc-row-body">
+              <p class="doc-row-msg truncate">{{ n.message }}</p>
+              <p class="doc-row-time">{{ fmtTime(n.created_at) }}</p>
+            </div>
+            <router-link to="/approvals/documents" class="btn-text" style="font-size: var(--text-sm); white-space: nowrap;">
+              Review
+            </router-link>
+          </li>
+        </ul>
       </div>
 
-      <!-- Two-column: Alerts + Recent Activity -->
+      <!-- ── Two-column: Alerts + Recent Activity ───────────── -->
       <div class="two-col">
 
         <!-- Alerts -->
-        <div class="card">
-          <h2 class="section-title">
-            <svg class="title-icon warn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <div class="card card-sm">
+          <div class="card-section-heading">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: #D97706; flex-shrink: 0;">
               <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
               <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
             </svg>
-            Alerts ({{ stats.alerts?.length || 0 }})
-          </h2>
-          <div v-if="!stats.alerts?.length" class="empty-state">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="empty-icon">
+            Alerts
+            <span class="badge badge-neutral" style="margin-left: 4px;">{{ stats.alerts?.length || 0 }}</span>
+          </div>
+
+          <div v-if="!stats.alerts?.length" class="empty-state" style="padding: var(--space-8) var(--space-4);">
+            <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="color: var(--color-success);">
               <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
             </svg>
-            <span>All employees have complete records.</span>
+            <p>All employees have complete records.</p>
           </div>
-          <ul v-else class="alert-list">
+
+          <ul v-else class="alert-list" role="list">
             <li v-for="(alert, i) in stats.alerts" :key="i" class="alert-item">
-              <div class="alert-name">{{ alert.employee_name }}</div>
-              <div class="alert-missing">Missing: {{ alert.missing.join(', ') }}</div>
+              <p class="alert-name">{{ alert.employee_name }}</p>
+              <p class="alert-missing">Missing: {{ alert.missing.join(', ') }}</p>
             </li>
           </ul>
         </div>
 
         <!-- Recent Activity -->
-        <div class="card" v-if="hasRole(['super_admin','accountant'])">
-          <h2 class="section-title">
-            <svg class="title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <div v-if="hasRole(['super_admin', 'accountant'])" class="card card-sm">
+          <div class="card-section-heading">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--color-text-muted); flex-shrink: 0;">
               <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
             </svg>
             Recent Activity
-          </h2>
-          <div v-if="!stats.recent_activity?.length" class="empty-state">
-            <span>No recent activity.</span>
           </div>
-          <ul v-else class="activity-list">
+
+          <div v-if="!stats.recent_activity?.length" class="empty-state" style="padding: var(--space-8) var(--space-4);">
+            <p>No recent activity.</p>
+          </div>
+
+          <ul v-else class="activity-list" role="list">
             <li v-for="event in stats.recent_activity" :key="event.id" class="activity-item">
-              <span class="activity-badge" :class="actionClass(event.action)">{{ actionLabel(event.action) }}</span>
+              <span class="badge" :class="actionClass(event.action)">{{ actionLabel(event.action) }}</span>
               <div class="activity-meta">
-                <span class="activity-user">{{ event.user_name || 'System' }}</span>
+                <span class="activity-user truncate">{{ event.user_name || 'System' }}</span>
                 <span class="activity-time">{{ fmtTime(event.timestamp) }}</span>
               </div>
             </li>
           </ul>
-          <router-link to="/audit" class="view-all-link">View full audit log →</router-link>
+
+          <router-link to="/audit" class="audit-link">View full audit log &rarr;</router-link>
         </div>
 
       </div>
-    </template>
 
+    </template>
   </div>
 </template>
 
@@ -241,7 +268,9 @@ export default {
 
     const hasRole = (roles) => auth.roles?.some(r => roles.includes(r))
 
-    const firstName = computed(() => auth.user?.first_name || auth.user?.email?.split('@')[0] || 'there')
+    const firstName = computed(() =>
+      auth.user?.first_name || auth.user?.email?.split('@')[0] || 'there'
+    )
 
     const greeting = computed(() => {
       const h = new Date().getHours()
@@ -250,28 +279,41 @@ export default {
       return 'Good evening'
     })
 
-    const fmtMoney = (n) => Number(n || 0).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    const fmtMoney = (n) =>
+      Number(n || 0).toLocaleString('en-ZA', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })
 
     const fmtTime = (iso) => {
       if (!iso) return ''
-      const d = new Date(iso)
-      return d.toLocaleString('en-ZA', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+      return new Date(iso).toLocaleString('en-ZA', {
+        day: '2-digit',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
     }
 
     const actionLabel = (action) => {
       const map = {
-        'user.login': 'Login', 'employee.create': 'New Employee', 'employee.update': 'Employee Edit',
-        'employee.delete': 'Deleted', 'employee.import': 'CSV Import',
-        'payroll.bulk_run': 'Bulk Payroll', 'payroll.submit': 'Submitted', 'payroll.approve': 'Approved',
-        'payroll.reject': 'Rejected'
+        'user.login':        'Login',
+        'employee.create':   'New Employee',
+        'employee.update':   'Employee Edit',
+        'employee.delete':   'Deleted',
+        'employee.import':   'CSV Import',
+        'payroll.bulk_run':  'Bulk Payroll',
+        'payroll.submit':    'Submitted',
+        'payroll.approve':   'Approved',
+        'payroll.reject':    'Rejected',
       }
       return map[action] || action
     }
 
     const actionClass = (action) => {
       if (action.includes('delete') || action.includes('reject')) return 'badge-red'
-      if (action.includes('approve')) return 'badge-green'
-      if (action.includes('payroll')) return 'badge-blue'
+      if (action.includes('approve'))  return 'badge-green'
+      if (action.includes('payroll'))  return 'badge-blue'
       return 'badge-gray'
     }
 
@@ -288,187 +330,316 @@ export default {
             .filter(n => n.type === 'DOCUMENT_UPLOADED')
             .slice(0, 5)
         }
-      } catch {}
+      } catch { /* non-fatal — skeleton stays hidden */ }
       loading.value = false
     }
 
     onMounted(load)
 
-    return { stats, loading, recentDocUploads, hasRole, firstName, greeting, fmtMoney, fmtTime, actionLabel, actionClass }
-  }
+    return {
+      stats,
+      loading,
+      recentDocUploads,
+      hasRole,
+      firstName,
+      greeting,
+      fmtMoney,
+      fmtTime,
+      actionLabel,
+      actionClass,
+    }
+  },
 }
 </script>
 
 <style scoped>
-.dashboard-content {
-  padding: 24px;
-  max-width: 1100px;
+/* ── Page shell ──────────────────────────────────────────────── */
+.dashboard {
+  padding: var(--space-6);
+  max-width: 1200px;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: var(--space-6);
 }
 
-/* Header */
-.page-header { display: flex; justify-content: space-between; align-items: flex-start; }
-.page-title { font-size: 18px; font-weight: 600; color: var(--color-text-base); margin: 0 0 4px; }
-.page-sub { font-size: 12.5px; color: var(--color-text-muted); margin: 0; }
-.header-actions { display: flex; gap: 10px; }
+/* ── Header ──────────────────────────────────────────────────── */
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-4);
+}
 
-/* Loading */
-.loading-row { display: flex; align-items: center; gap: 10px; color: var(--color-text-muted); font-size: 13px; }
-.spinner { width: 18px; height: 18px; border: 2px solid var(--color-border); border-top-color: var(--color-accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
-
-/* Stats grid */
+/* ── Stat cards grid ─────────────────────────────────────────── */
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
+  gap: var(--space-4);
 }
 
 .stat-card {
-  background: var(--color-bg-card);
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 10px;
-  padding: 16px;
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
   display: flex;
-  align-items: flex-start;
-  gap: 14px;
+  flex-direction: column;
+  gap: 4px;
+  transition: border-color var(--transition-fast);
 }
-.stat-card.card-warn { border-color: #fde68a; background: #fffbeb; }
 
-.stat-icon {
-  width: 40px; height: 40px; border-radius: 8px;
-  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+/* Orange left-border accent for pending-approvals card when count > 0 */
+.stat-card--warn {
+  border-left: 3px solid #F59E0B;
 }
-.stat-icon svg { width: 20px; height: 20px; }
-.stat-icon.blue { background: #eff6ff; color: #3b82f6; }
-.stat-icon.green { background: #f0fdf4; color: #22c55e; }
-.stat-icon.purple { background: #f5f3ff; color: #8b5cf6; }
-.stat-icon.orange { background: #fff7ed; color: #f59e0b; }
-.stat-icon.gray { background: var(--color-bg-page); color: var(--color-text-muted); }
 
-.stat-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.stat-val { font-size: 22px; font-weight: 700; color: var(--color-text-base); line-height: 1.1; }
-.stat-label { font-size: 11.5px; color: var(--color-text-muted); }
-.stat-sub { font-size: 11px; color: var(--color-text-muted); opacity: 0.75; }
-.stat-action { font-size: 11.5px; color: var(--color-accent); text-decoration: none; margin-top: 2px; }
-.stat-action:hover { text-decoration: underline; }
-
-/* Quick actions */
-.quick-actions { display: flex; flex-direction: column; gap: 10px; }
-.section-title {
-  font-size: 12px; font-weight: 600; color: var(--color-text-muted);
-  text-transform: uppercase; letter-spacing: 0.05em;
-  display: flex; align-items: center; gap: 6px; margin: 0 0 12px;
+.stat-value {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
 }
-.title-icon { width: 14px; height: 14px; flex-shrink: 0; }
-.warn-icon { color: #f59e0b; }
 
-.actions-row { display: flex; gap: 10px; flex-wrap: wrap; }
-.action-btn {
-  display: flex; align-items: center; gap: 8px;
-  padding: 10px 16px; background: var(--color-bg-card);
-  border: 1px solid var(--color-border); border-radius: 8px;
-  font-size: 13px; font-weight: 500; color: var(--color-text-base);
-  text-decoration: none; transition: border-color 0.12s, background 0.12s;
-  white-space: nowrap;
+.stat-label {
+  font-size: var(--text-sm);
+  font-weight: 400;
+  color: var(--color-text-muted);
 }
-.action-btn svg { width: 16px; height: 16px; flex-shrink: 0; color: var(--color-accent); }
-.action-btn:hover { border-color: var(--color-accent); background: #eff6ff; }
 
-/* Two column */
-.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-.card { background: var(--color-bg-card); border: 1px solid var(--color-border); border-radius: 10px; padding: 20px; }
+.stat-sub {
+  font-size: var(--text-xs);
+  color: var(--color-text-disabled);
+}
 
-/* Alerts */
-.empty-state { display: flex; align-items: center; gap: 8px; color: var(--color-text-muted); font-size: 13px; }
-.empty-icon { width: 18px; height: 18px; color: #22c55e; flex-shrink: 0; }
-.alert-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
-.alert-item { padding: 10px 12px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 7px; }
-.alert-name { font-size: 13px; font-weight: 500; color: var(--color-text-base); }
-.alert-missing { font-size: 11.5px; color: #92400e; margin-top: 2px; }
+.stat-link {
+  margin-top: 4px;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--color-accent);
+  text-decoration: none;
+}
+.stat-link:hover { text-decoration: underline; }
 
-/* Activity */
-.activity-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
-.activity-item { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--color-border); }
-.activity-item:last-child { border-bottom: none; }
-.activity-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; white-space: nowrap; flex-shrink: 0; }
-.badge-blue { background: #dbeafe; color: #1d4ed8; }
-.badge-green { background: #dcfce7; color: #15803d; }
-.badge-red { background: #fee2e2; color: #b91c1c; }
-.badge-gray { background: var(--color-bg-page); color: var(--color-text-muted); }
-.activity-meta { display: flex; flex-direction: column; min-width: 0; flex: 1; }
-.activity-user { font-size: 12.5px; color: var(--color-text-base); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.activity-time { font-size: 11px; color: var(--color-text-muted); }
-.view-all-link { display: block; text-align: center; font-size: 12px; color: var(--color-accent); text-decoration: none; margin-top: 12px; }
-.view-all-link:hover { text-decoration: underline; }
-
-/* Approval queue cards */
+/* ── Approval queue ──────────────────────────────────────────── */
 .approvals-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
+  gap: var(--space-4);
 }
 
-.approval-card {
+.approval-cell {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 16px;
-  background: var(--color-bg-card);
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   text-decoration: none;
-  transition: border-color 0.12s, box-shadow 0.12s;
+  color: inherit;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
 }
-.approval-card:hover { border-color: var(--color-accent); box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
-.approval-card--active { border-color: #fde68a; background: #fffbeb; }
-.approval-card--active:hover { border-color: #f59e0b; }
-
-.approval-icon {
-  width: 40px; height: 40px; border-radius: 8px;
-  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+.approval-cell:hover {
+  border-color: var(--color-border-strong);
 }
-.approval-icon svg { width: 20px; height: 20px; }
-.approval-icon.orange { background: #fff7ed; color: #f59e0b; }
-.approval-icon.gray { background: var(--color-bg-page); color: var(--color-text-muted); }
 
-.approval-body { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
-.approval-count { font-size: 22px; font-weight: 700; color: var(--color-text-base); line-height: 1.1; }
-.approval-label { font-size: 11.5px; color: var(--color-text-muted); }
-.approval-arrow { font-size: 16px; color: var(--color-accent); flex-shrink: 0; }
-
-/* Recent doc uploads */
-.doc-uploads-card { padding: 20px; }
-.view-all-inline {
-  margin-left: auto;
-  font-size: 12px; font-weight: 400;
-  color: var(--color-accent); text-decoration: none;
-  text-transform: none; letter-spacing: 0;
+.approval-cell--active {
+  background: #FFFBEB;
+  border-color: #FCD34D;
 }
-.view-all-inline:hover { text-decoration: underline; }
-
-.doc-upload-list { display: flex; flex-direction: column; gap: 0; margin-top: 10px; }
-.doc-upload-item {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 10px 0; border-bottom: 1px solid var(--color-border);
+.approval-cell--active:hover {
+  border-color: #F59E0B;
 }
-.doc-upload-item:last-child { border-bottom: none; }
-.doc-upload-body { flex: 1; min-width: 0; }
-.doc-upload-msg { font-size: 13px; color: var(--color-text-base); margin: 0 0 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.doc-upload-time { font-size: 11px; color: var(--color-text-muted); margin: 0; }
-.doc-upload-action { font-size: 12px; color: var(--color-accent); text-decoration: none; white-space: nowrap; flex-shrink: 0; }
-.doc-upload-action:hover { text-decoration: underline; }
 
+.approval-cell-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.approval-count {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.approval-label {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.approval-arrow {
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+/* ── Quick actions ───────────────────────────────────────────── */
+.actions-row {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* ── Document uploads card ───────────────────────────────────── */
+.doc-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.doc-card-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.doc-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.doc-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.doc-row:last-child { border-bottom: none; }
+
+.doc-row-body { flex: 1; min-width: 0; }
+
+.doc-row-msg {
+  font-size: var(--text-base);
+  color: var(--color-text-base);
+  margin: 0 0 2px;
+}
+
+.doc-row-time {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+/* ── Alerts + Activity column headings ───────────────────────── */
+.card-section-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-4);
+}
+
+/* ── Alert list ──────────────────────────────────────────────── */
+.alert-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.alert-item {
+  padding: 10px var(--space-3);
+  background: #FFFBEB;
+  border: 1px solid #FCD34D;
+  border-radius: var(--radius-md);
+}
+
+.alert-name {
+  font-size: var(--text-base);
+  font-weight: 500;
+  color: var(--color-text-primary);
+  margin: 0 0 2px;
+}
+
+.alert-missing {
+  font-size: var(--text-xs);
+  color: #92400e;
+  margin: 0;
+}
+
+/* ── Activity list ───────────────────────────────────────────── */
+.activity-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.activity-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 8px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.activity-item:last-child { border-bottom: none; }
+
+.activity-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.activity-user {
+  font-size: var(--text-base);
+  color: var(--color-text-base);
+}
+
+.activity-time {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.audit-link {
+  display: block;
+  text-align: center;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-accent);
+  text-decoration: none;
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+.audit-link:hover { color: var(--color-accent-hover); }
+
+/* ── Two-column layout ───────────────────────────────────────── */
+.two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-5);
+}
+
+/* ── Responsive ──────────────────────────────────────────────── */
 @media (max-width: 900px) {
-  .stats-grid { grid-template-columns: 1fr 1fr; }
+  .stats-grid    { grid-template-columns: 1fr 1fr; }
   .approvals-grid { grid-template-columns: 1fr 1fr; }
-  .two-col { grid-template-columns: 1fr; }
+  .two-col       { grid-template-columns: 1fr; }
 }
-@media (max-width: 540px) {
-  .stats-grid { grid-template-columns: 1fr; }
+
+@media (max-width: 600px) {
+  .dashboard     { padding: var(--space-4); gap: var(--space-4); }
+  .stats-grid    { grid-template-columns: 1fr; }
   .approvals-grid { grid-template-columns: 1fr; }
-  .actions-row { flex-direction: column; }
+  .actions-row   { flex-direction: column; }
 }
 </style>

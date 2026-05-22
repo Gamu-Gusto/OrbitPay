@@ -1,151 +1,164 @@
 <template>
-  <div class="hr-reports-layout">
-    <div class="hr-content">
-      <!-- Page Header -->
-      <div class="page-header">
-        <div class="header-left">
-          <h1 class="page-title">HR Reports</h1>
-          <div class="breadcrumb">
-            <span>HR Reports</span>
-            <span class="separator">/</span>
-            <span>Dashboard</span>
-          </div>
-        </div>
-        <div class="header-right">
-          <button @click="exportEmployeesCsv" class="btn-primary" :disabled="loading || filteredEmployeeList.length === 0">
-            Export CSV
-          </button>
+  <div class="view-content">
+
+    <!-- Page Header -->
+    <div class="page-header" style="margin-bottom:0">
+      <div>
+        <h1 class="page-title">HR Reports</h1>
+        <div class="breadcrumb">
+          <span>HR Reports</span>
+          <span class="sep">/</span>
+          <span>Dashboard</span>
         </div>
       </div>
+      <button
+        @click="exportEmployeesCsv"
+        class="btn btn-secondary"
+        :disabled="loading || filteredEmployeeList.length === 0"
+      >
+        Export CSV
+      </button>
+    </div>
 
-      <!-- Loading & Error -->
-      <div v-if="errorMessage" class="text-sm text-error mb-4">{{ errorMessage }}</div>
+    <!-- Error -->
+    <div v-if="errorMessage" class="info-box info-red">{{ errorMessage }}</div>
 
-      <!-- Company Selector -->
-      <div class="company-selector mb-6">
+    <!-- Company Selector -->
+    <div class="card card-sm">
+      <div class="form-group" style="max-width:320px">
         <label class="form-label">Select Company</label>
-        <select v-model.number="selectedCompanyId" @change="onCompanyChange" class="form-input w-64" :disabled="loading">
-          <option v-for="company in companies" :key="company.id" :value="company.id">{{ company.name }}</option>
+        <select
+          v-model.number="selectedCompanyId"
+          @change="onCompanyChange"
+          class="form-input"
+          :disabled="loading"
+        >
+          <option v-for="company in companies" :key="company.id" :value="company.id">
+            {{ company.name }}
+          </option>
         </select>
       </div>
+    </div>
 
-      <!-- Loading skeleton -->
-      <SkeletonDashboard v-if="loading" />
+    <!-- Skeleton while loading -->
+    <SkeletonDashboard v-if="loading" />
 
+    <template v-else>
       <!-- Metric Cards -->
-      <div v-else class="metrics-grid">
-        <MetricCard label="Active Employees" :value="headcount.active" />
-        <MetricCard label="Terminated" :value="headcount.terminated" type="error" />
-        <MetricCard label="Turnover Rate" :value="turnoverRate + '%'" />
-        <MetricCard label="Leave Taken" :value="leaveStats.taken" />
+      <div class="metrics-grid">
+        <MetricCard label="Active Employees"  :value="headcount.active"     />
+        <MetricCard label="Terminated"        :value="headcount.terminated" type="error" />
+        <MetricCard label="Turnover Rate"     :value="turnoverRate + '%'"   />
+        <MetricCard label="Leave Taken"       :value="leaveStats.taken"     />
       </div>
-    
-    <!-- Employee Salary List -->
-    <div class="mt-6 bg-white p-6 rounded-lg shadow-sm">
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="text-xl font-semibold text-gray-800">Employee Salary Details</h2>
-        <div class="flex items-center gap-3">
-          <button @click="exportEmployeesCsv" class="px-3 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50" :disabled="loading || filteredEmployeeList.length === 0">
+
+      <!-- Employee Salary Details -->
+      <div class="card" style="padding:0;overflow:hidden">
+        <!-- Card header -->
+        <div class="card-header" style="padding:16px 20px;margin-bottom:0">
+          <h2 class="card-title">Employee Salary Details</h2>
+          <button
+            @click="exportEmployeesCsv"
+            class="btn btn-secondary btn-sm"
+            :disabled="loading || filteredEmployeeList.length === 0"
+          >
             Export CSV
           </button>
         </div>
-      </div>
-      <div class="flex flex-wrap items-center gap-3 mb-4">
-        <label class="text-sm text-gray-700">Status</label>
-        <select v-model="statusFilter" class="form-select w-40">
-          <option value="all">All</option>
-          <option value="active">Active</option>
-          <option value="inactive">Inactive</option>
-        </select>
-        <label class="text-sm text-gray-700">Position</label>
-        <select v-model="positionFilter" class="form-select w-56">
-          <option value="">All positions</option>
-          <option v-for="pos in uniquePositions" :key="pos" :value="pos">{{ pos }}</option>
-        </select>
-      </div>
-      <div class="overflow-x-auto">
-        <table class="min-w-full table-auto border-collapse border border-gray-300">
-          <thead class="bg-gray-50">
-            <tr>
-              <th class="border border-gray-300 px-4 py-2 text-left text-sm font-medium text-gray-700">Employee #</th>
-              <th class="border border-gray-300 px-4 py-2 text-left text-sm font-medium text-gray-700">Name</th>
-              <th class="border border-gray-300 px-4 py-2 text-left text-sm font-medium text-gray-700">Position</th>
-              <th class="border border-gray-300 px-4 py-2 text-right text-sm font-medium text-gray-700">Basic Salary</th>
-              <th class="border border-gray-300 px-4 py-2 text-right text-sm font-medium text-gray-700">Allowances</th>
-              <th class="border border-gray-300 px-4 py-2 text-right text-sm font-medium text-gray-700">Deductions</th>
-              <th class="border border-gray-300 px-4 py-2 text-right text-sm font-medium text-gray-700">Gross Salary</th>
-              <th class="border border-gray-300 px-4 py-2 text-center text-sm font-medium text-gray-700">Status</th>
-              <th class="border border-gray-300 px-4 py-2 text-left text-sm font-medium text-gray-700">Bank Details</th>
-            </tr>
-          </thead>
-          <tbody>
-            <!-- Skeleton rows while loading -->
-            <tr v-if="loading" v-for="i in 5" :key="'sk_'+i" class="hover:bg-gray-50 animate-pulse">
-              <td class="border border-gray-300 px-4 py-3"><div class="h-3 bg-gray-200 rounded w-16"></div></td>
-              <td class="border border-gray-300 px-4 py-3"><div class="h-3 bg-gray-200 rounded w-32"></div></td>
-              <td class="border border-gray-300 px-4 py-3"><div class="h-3 bg-gray-200 rounded w-24"></div></td>
-              <td class="border border-gray-300 px-4 py-3"><div class="h-3 bg-gray-200 rounded w-20 ml-auto"></div></td>
-              <td class="border border-gray-300 px-4 py-3"><div class="h-3 bg-gray-200 rounded w-20 ml-auto"></div></td>
-              <td class="border border-gray-300 px-4 py-3"><div class="h-3 bg-gray-200 rounded w-20 ml-auto"></div></td>
-              <td class="border border-gray-300 px-4 py-3"><div class="h-3 bg-gray-200 rounded w-24 ml-auto"></div></td>
-              <td class="border border-gray-300 px-4 py-3"><div class="h-5 bg-gray-200 rounded w-16 mx-auto"></div></td>
-              <td class="border border-gray-300 px-4 py-3"><div class="h-3 bg-gray-200 rounded w-28"></div></td>
-            </tr>
-            <!-- Actual data rows -->
-            <tr v-else v-for="employee in filteredEmployeeList" :key="employee.id" class="hover:bg-gray-50">
-              <td class="border border-gray-300 px-4 py-2 text-sm">{{ employee.employee_no || 'N/A' }}</td>
-              <td class="border border-gray-300 px-4 py-2 text-sm font-medium">{{ employee.full_name }}</td>
-              <td class="border border-gray-300 px-4 py-2 text-sm">{{ employee.position || 'N/A' }}</td>
-              <td class="border border-gray-300 px-4 py-2 text-sm text-right">{{ formatCurrency(employee.basic_salary) }}</td>
-              <td class="border border-gray-300 px-4 py-2 text-sm text-right">{{ formatCurrency(employee.total_allowances) }}</td>
-              <td class="border border-gray-300 px-4 py-2 text-sm text-right">{{ formatCurrency(employee.total_deductions) }}</td>
-              <td class="border border-gray-300 px-4 py-2 text-sm text-right font-semibold">{{ formatCurrency(employee.gross_salary) }}</td>
-              <td class="border border-gray-300 px-4 py-2 text-center">
-                <span :class="employee.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'" 
-                      class="px-2 py-1 rounded-full text-xs font-medium">
-                  {{ employee.is_active ? 'Active' : 'Inactive' }}
-                </span>
-              </td>
-              <td class="border border-gray-300 px-4 py-2 text-sm">
-                <div v-if="employee.bank_name">
-                  <div class="font-medium">{{ employee.bank_name }}</div>
-                  <div class="text-gray-600">{{ employee.account_number || 'N/A' }}</div>
-                </div>
-                <div v-else class="text-gray-400">No bank details</div>
-              </td>
-            </tr>
-            <tr v-if="!loading && filteredEmployeeList.length === 0">
-              <td colspan="9" class="border border-gray-300 px-4 py-8 text-center text-gray-500">
-                No employees found for the selected company
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      
-      <!-- Summary Row -->
-      <div class="mt-4 p-4 bg-gray-50 rounded-lg">
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
+
+        <!-- Filters -->
+        <div style="display:flex;flex-wrap:wrap;align-items:flex-end;gap:16px;padding:14px 20px;border-bottom:1px solid var(--color-border)">
+          <div class="form-group" style="min-width:140px">
+            <label class="form-label">Status</label>
+            <select v-model="statusFilter" class="form-input">
+              <option value="all">All</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </div>
+          <div class="form-group" style="min-width:200px">
+            <label class="form-label">Position</label>
+            <select v-model="positionFilter" class="form-input">
+              <option value="">All positions</option>
+              <option v-for="pos in uniquePositions" :key="pos" :value="pos">{{ pos }}</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Table -->
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Employee #</th>
+                <th>Name</th>
+                <th>Position</th>
+                <th class="col-right">Basic Salary</th>
+                <th class="col-right">Allowances</th>
+                <th class="col-right">Deductions</th>
+                <th class="col-right">Gross Salary</th>
+                <th style="text-align:center">Status</th>
+                <th>Bank Details</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="filteredEmployeeList.length === 0">
+                <td colspan="9">
+                  <div class="empty-state" style="padding:40px 24px">
+                    <p>No employees found for the selected filters.</p>
+                  </div>
+                </td>
+              </tr>
+              <tr v-for="employee in filteredEmployeeList" :key="employee.id">
+                <td class="cell-muted">{{ employee.employee_no || 'N/A' }}</td>
+                <td class="cell-primary">{{ employee.full_name }}</td>
+                <td>{{ employee.position || 'N/A' }}</td>
+                <td class="col-right">{{ formatCurrency(employee.basic_salary) }}</td>
+                <td class="col-right">{{ formatCurrency(employee.total_allowances) }}</td>
+                <td class="col-right">{{ formatCurrency(employee.total_deductions) }}</td>
+                <td class="col-right" style="font-weight:600">{{ formatCurrency(employee.gross_salary) }}</td>
+                <td style="text-align:center">
+                  <span
+                    class="badge"
+                    :class="employee.is_active ? 'badge-success' : 'badge-neutral'"
+                  >
+                    {{ employee.is_active ? 'Active' : 'Inactive' }}
+                  </span>
+                </td>
+                <td>
+                  <template v-if="employee.bank_name">
+                    <div class="cell-primary" style="font-size:12px">{{ employee.bank_name }}</div>
+                    <div class="cell-muted">{{ employee.account_number || 'N/A' }}</div>
+                  </template>
+                  <span v-else class="cell-muted">No bank details</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Summary footer -->
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;padding:14px 20px;background:var(--color-bg-subtle);border-top:1px solid var(--color-border)">
           <div>
-            <span class="font-medium text-gray-700">Total Employees:</span>
-            <span class="ml-2 font-bold">{{ filteredEmployeeList.length }}</span>
+            <div class="section-label" style="margin-bottom:4px">Total Employees</div>
+            <div style="font-size:14px;font-weight:600;color:var(--color-text-primary)">{{ filteredEmployeeList.length }}</div>
           </div>
           <div>
-            <span class="font-medium text-gray-700">Total Basic Salaries:</span>
-            <span class="ml-2 font-bold">{{ formatCurrency(totalBasicSalaries) }}</span>
+            <div class="section-label" style="margin-bottom:4px">Total Basic Salaries</div>
+            <div style="font-size:14px;font-weight:600;color:var(--color-text-primary)">{{ formatCurrency(totalBasicSalaries) }}</div>
           </div>
           <div>
-            <span class="font-medium text-gray-700">Total Allowances:</span>
-            <span class="ml-2 font-bold">{{ formatCurrency(totalAllowances) }}</span>
+            <div class="section-label" style="margin-bottom:4px">Total Allowances</div>
+            <div style="font-size:14px;font-weight:600;color:var(--color-text-primary)">{{ formatCurrency(totalAllowances) }}</div>
           </div>
           <div>
-            <span class="font-medium text-gray-700">Total Gross Salaries:</span>
-            <span class="ml-2 font-bold text-green-600">{{ formatCurrency(totalGrossSalaries) }}</span>
+            <div class="section-label" style="margin-bottom:4px">Total Gross Salaries</div>
+            <div style="font-size:14px;font-weight:600;color:var(--color-success)">{{ formatCurrency(totalGrossSalaries) }}</div>
           </div>
         </div>
       </div>
-    </div>
-    </div>
+    </template>
+
   </div>
 </template>
 
@@ -174,11 +187,11 @@ export default {
     const loading = ref(false)
     const errorMessage = ref('')
     const toast = useToastStore()
-    
+
     // Company selection
     const companies = ref([])
     const selectedCompanyId = ref(0)
-    
+
     // Employee salary data
     const employeeList = ref([])
 
@@ -209,7 +222,6 @@ export default {
         })
         companies.value = data
         if (Array.isArray(data) && data.length > 0) {
-          // If no selection yet or selection not in list, default to first company
           const exists = data.some(c => c.id === selectedCompanyId.value)
           if (!exists) {
             selectedCompanyId.value = data[0].id
@@ -280,11 +292,11 @@ export default {
     const totalBasicSalaries = computed(() => {
       return filteredEmployeeList.value.reduce((sum, emp) => sum + (emp.basic_salary || 0), 0)
     })
-    
+
     const totalAllowances = computed(() => {
       return filteredEmployeeList.value.reduce((sum, emp) => sum + (emp.total_allowances || 0), 0)
     })
-    
+
     const totalGrossSalaries = computed(() => {
       return filteredEmployeeList.value.reduce((sum, emp) => sum + (emp.gross_salary || 0), 0)
     })
@@ -370,135 +382,26 @@ export default {
 </script>
 
 <style scoped>
-.hr-reports-layout {
-  min-height: 100vh;
-  background-color: var(--color-bg-page);
-}
-
-.hr-content {
+.view-content {
   padding: 24px;
   max-width: 1280px;
-}
-
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 24px;
-}
-
-.header-left {
   display: flex;
   flex-direction: column;
-}
-
-.page-title {
-  font-size: 16px;
-  font-weight: 500;
-  color: var(--color-text-base);
-  margin-bottom: 4px;
-}
-
-.breadcrumb {
-  font-size: 11px;
-  color: var(--color-text-muted);
-}
-
-.breadcrumb .separator {
-  margin: 0 6px;
-}
-
-.company-selector {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.w-64 {
-  width: 256px;
+  gap: 20px;
 }
 
 .metrics-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 16px;
-  margin-bottom: 24px;
-}
-
-.skeleton-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-  margin-bottom: 24px;
-}
-
-.skeleton-card {
-  background-color: var(--color-bg-card);
-  border: 0.5px solid var(--color-border);
-  border-radius: 8px;
-  padding: 16px;
-}
-
-.skeleton-line {
-  height: 12px;
-  background-color: var(--color-border);
-  border-radius: 4px;
-  margin-bottom: 12px;
-  animation: pulse 2s infinite;
-}
-
-.skeleton-value {
-  height: 24px;
-  width: 60%;
-  background-color: var(--color-border);
-  border-radius: 4px;
-  animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
-
-.text-muted {
-  color: var(--color-text-muted);
-}
-
-.text-error {
-  color: var(--color-error);
-}
-
-.mb-4 {
-  margin-bottom: 16px;
-}
-
-.mb-6 {
-  margin-bottom: 24px;
-}
-
-.mt-6 {
-  margin-top: 24px;
 }
 
 @media (max-width: 1024px) {
-  .metrics-grid,
-  .skeleton-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
+  .metrics-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
 @media (max-width: 640px) {
-  .hr-content {
-    padding: 16px;
-  }
-  
-  .metrics-grid,
-  .skeleton-grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .w-64 {
-    width: 100%;
-  }
+  .view-content { padding: 16px; }
+  .metrics-grid { grid-template-columns: 1fr; }
 }
 </style>

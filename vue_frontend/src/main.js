@@ -3,8 +3,6 @@ import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
 import './style.css'
-import './styles/tokens.css'
-import './styles/components.css'
 import axios from 'axios'
 import { useAuthStore } from './stores/auth'
 

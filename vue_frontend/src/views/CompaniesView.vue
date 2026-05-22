@@ -1,31 +1,33 @@
 <template>
-  <div class="companies-layout">
-    <div class="companies-content">
-      <!-- Page Header -->
-      <div class="page-header">
-        <div class="header-left">
-          <h1 class="page-title">Companies</h1>
-          <div class="breadcrumb">
-            <span>Companies</span>
-            <span class="separator">/</span>
-            <span>All Companies</span>
-          </div>
-        </div>
-        <div class="header-right">
-          <button @click="openCreateCompany" class="btn-primary">New Company</button>
-        </div>
+  <div class="view-content">
+
+    <!-- Page header -->
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">Companies</h1>
+        <p class="page-subtitle">
+          {{ companies.length }} {{ companies.length === 1 ? 'company' : 'companies' }} registered
+        </p>
       </div>
+      <button @click="openCreateCompany" class="btn btn-primary">
+        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+        </svg>
+        Add Company
+      </button>
+    </div>
 
-      <!-- Loading skeleton -->
-      <SkeletonTable v-if="loading" :rows="4" :cols="3" />
+    <!-- Skeleton while loading -->
+    <SkeletonTable v-if="loading" :rows="4" :cols="5" />
 
-      <!-- Companies Table -->
-      <div v-else class="card">
-        <table class="data-table">
+    <!-- Companies table card -->
+    <div v-else class="card" style="padding: 0;">
+      <div class="table-wrap">
+        <table v-if="companies.length" class="data-table">
           <thead>
             <tr>
-              <th>Name</th>
-              <th>Registration #</th>
+              <th>Company Name</th>
+              <th>Reg Number</th>
               <th>UIF Reference</th>
               <th>Email</th>
               <th>Actions</th>
@@ -33,69 +35,121 @@
           </thead>
           <tbody>
             <tr v-for="company in companies" :key="company.id">
-              <td class="font-medium">{{ company.name }}</td>
-              <td>{{ company.registration_number || '-' }}</td>
-              <td>{{ company.uif_reference || '-' }}</td>
-              <td>{{ company.email || '-' }}</td>
-              <td class="actions">
-                <button @click="openEditCompany(company)" class="btn-text">Edit</button>
-                <button @click="deleteCompany(company.id)" class="btn-text danger">Delete</button>
-                <button @click="manageEmployees(company)" class="btn-text">Employees</button>
+              <td class="cell-primary font-medium">{{ company.name }}</td>
+              <td class="cell-muted">{{ company.registration_number || '—' }}</td>
+              <td class="cell-muted">{{ company.uif_reference || '—' }}</td>
+              <td class="cell-muted">{{ company.email || '—' }}</td>
+              <td>
+                <div class="col-actions">
+                  <button
+                    @click="manageEmployees(company)"
+                    class="btn btn-secondary btn-sm"
+                  >View Employees</button>
+                  <button
+                    @click="openEditCompany(company)"
+                    class="btn btn-ghost btn-sm"
+                  >Edit</button>
+                  <button
+                    @click="openDeleteConfirm(company)"
+                    class="btn btn-danger btn-sm"
+                  >Delete</button>
+                </div>
               </td>
             </tr>
           </tbody>
         </table>
-        <div v-if="companies.length === 0" class="empty-state">
-          <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
-          </svg>
-          <p>No companies yet.</p>
-          <button @click="openCreateCompany" class="btn-primary">Add your first company</button>
-        </div>
-      </div>
 
-      <!-- Modal -->
-      <div v-if="showModal" class="modal-overlay">
-        <div class="modal">
-          <div class="modal-header">
-            <h2>{{ editingCompany ? 'Edit Company' : 'New Company' }}</h2>
-            <button @click="closeModal" class="modal-close">✕</button>
-          </div>
-          <div class="modal-body">
-            <div class="form-grid">
-              <div class="form-group">
-                <label class="form-label">Name</label>
-                <input v-model="form.name" type="text" class="form-input" />
-              </div>
-              <div class="form-group">
-                <label class="form-label">Registration #</label>
-                <input v-model="form.registration_number" type="text" class="form-input" />
-              </div>
-              <div class="form-group span-2">
-                <label class="form-label">Address</label>
-                <textarea v-model="form.address" rows="2" class="form-input"></textarea>
-              </div>
-              <div class="form-group">
-                <label class="form-label">UIF Reference</label>
-                <input v-model="form.uif_reference" type="text" class="form-input" />
-              </div>
-              <div class="form-group">
-                <label class="form-label">Phone</label>
-                <input v-model="form.phone" type="text" class="form-input" />
-              </div>
-              <div class="form-group span-2">
-                <label class="form-label">Email</label>
-                <input v-model="form.email" type="email" class="form-input" />
-              </div>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button @click="closeModal" class="btn-secondary">Cancel</button>
-            <button @click="saveCompany" class="btn-primary">Save</button>
-          </div>
+        <!-- Empty state -->
+        <div v-else class="empty-state">
+          <svg class="empty-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+              d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+          </svg>
+          <p class="empty-title">No companies yet</p>
+          <p>Add your first company to get started.</p>
+          <button @click="openCreateCompany" class="btn btn-primary btn-sm">Add Company</button>
         </div>
       </div>
     </div>
+
+    <!-- ── Add / Edit company modal ── -->
+    <teleport to="body">
+      <div v-if="showModal" class="modal-overlay" @mousedown.self="closeModal">
+        <div class="modal">
+          <div class="modal-header">
+            <h2>{{ editingCompany ? 'Edit Company' : 'New Company' }}</h2>
+            <button @click="closeModal" class="modal-close" aria-label="Close">✕</button>
+          </div>
+
+          <div class="modal-body">
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label">Company Name <span style="color:var(--color-error)">*</span></label>
+                <input v-model="form.name" type="text" class="form-input" placeholder="Acme Corp" />
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Registration Number</label>
+                <input v-model="form.registration_number" type="text" class="form-input" placeholder="2023/123456/07" />
+              </div>
+
+              <div class="form-group span-2">
+                <label class="form-label">Address</label>
+                <textarea v-model="form.address" rows="2" class="form-input" placeholder="123 Main Street, Johannesburg, 2001"></textarea>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">UIF Reference</label>
+                <input v-model="form.uif_reference" type="text" class="form-input" placeholder="UIF-000000" />
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Phone</label>
+                <input v-model="form.phone" type="text" class="form-input" placeholder="+27 11 000 0000" />
+              </div>
+
+              <div class="form-group span-2">
+                <label class="form-label">Email</label>
+                <input v-model="form.email" type="email" class="form-input" placeholder="info@company.co.za" />
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-footer">
+            <button @click="closeModal" class="btn btn-secondary">Cancel</button>
+            <button @click="saveCompany" class="btn btn-primary">
+              {{ editingCompany ? 'Save Changes' : 'Create Company' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </teleport>
+
+    <!-- ── Delete confirmation modal ── -->
+    <teleport to="body">
+      <div v-if="showDeleteModal" class="modal-overlay" @mousedown.self="closeDeleteModal">
+        <div class="modal modal-narrow">
+          <div class="modal-header">
+            <h2>Delete Company</h2>
+            <button @click="closeDeleteModal" class="modal-close" aria-label="Close">✕</button>
+          </div>
+
+          <div class="modal-body">
+            <p class="text-base" style="color: var(--color-text-secondary); line-height: 1.6;">
+              Are you sure you want to delete
+              <strong style="color: var(--color-text-primary);">{{ companyToDelete?.name }}</strong>?
+              This action cannot be undone.
+            </p>
+          </div>
+
+          <div class="modal-footer">
+            <button @click="closeDeleteModal" class="btn btn-secondary">Cancel</button>
+            <button @click="confirmDelete" class="btn btn-danger">Delete Company</button>
+          </div>
+        </div>
+      </div>
+    </teleport>
+
   </div>
 </template>
 
@@ -105,6 +159,7 @@ import axios from 'axios'
 import { useAuthStore } from '../stores/auth'
 import { useRouter } from 'vue-router'
 import SkeletonTable from '../components/ui/SkeletonTable.vue'
+
 export default {
   name: 'CompaniesView',
   components: { SkeletonTable },
@@ -123,7 +178,11 @@ export default {
       email: ''
     })
 
-        const authStore = useAuthStore()
+    // Delete confirmation state
+    const showDeleteModal = ref(false)
+    const companyToDelete = ref(null)
+
+    const authStore = useAuthStore()
 
     // Using relative URLs to go through Vite proxy
 
@@ -141,9 +200,9 @@ export default {
         console.error('Error type:', typeof error)
         console.error('Error response:', error.response)
         console.error('Error response data:', error.response?.data)
-        
+
         let errorMessage = 'Failed to load companies'
-        
+
         if (error.response?.data?.detail) {
           errorMessage = String(error.response.data.detail)
         } else if (error.response?.data?.message) {
@@ -157,7 +216,7 @@ export default {
         } else if (error.response?.statusText) {
           errorMessage = `HTTP ${error.response.status}: ${error.response.statusText}`
         }
-        
+
         console.log('Final error message:', errorMessage)
         alert(`Error: ${errorMessage}`)
       } finally {
@@ -182,11 +241,11 @@ export default {
 
     const saveCompany = async () => {
       // Client-side validation
-      if (!form.name || form.name.trim() === '') { 
-        alert('Company name is required'); 
-        return 
+      if (!form.name || form.name.trim() === '') {
+        alert('Company name is required')
+        return
       }
-      
+
       // Validate email format if provided
       if (form.email && form.email.trim() !== '') {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -195,10 +254,10 @@ export default {
           return
         }
       }
-      
+
       try {
         console.log('Saving company with data:', form)
-        
+
         // Clean the data - remove empty strings and convert to null for optional fields
         const cleanData = {
           name: form.name.trim(),
@@ -208,19 +267,19 @@ export default {
           phone: form.phone?.trim() || null,
           email: form.email?.trim() || null
         }
-        
+
         console.log('Cleaned data:', cleanData)
-        
+
         if (editingCompany.value) {
           console.log('Updating company:', editingCompany.value.id)
           await axios.put(`/companies/${editingCompany.value.id}`, cleanData, {
-          headers: { Authorization: `Bearer ${authStore.accessToken}` }
-        })
+            headers: { Authorization: `Bearer ${authStore.accessToken}` }
+          })
         } else {
           console.log('Creating new company')
           await axios.post('/companies', cleanData, {
-          headers: { Authorization: `Bearer ${authStore.accessToken}` }
-        })
+            headers: { Authorization: `Bearer ${authStore.accessToken}` }
+          })
         }
         console.log('Company saved successfully')
         showModal.value = false
@@ -230,9 +289,9 @@ export default {
         console.error('Error type:', typeof error)
         console.error('Error response:', error.response)
         console.error('Error response data:', error.response?.data)
-        
+
         let errorMessage = 'Failed to save company'
-        
+
         // Handle 422 validation errors specifically
         if (error.response?.status === 422 && error.response?.data?.detail) {
           const validationErrors = error.response.data.detail
@@ -258,15 +317,27 @@ export default {
         } else if (error.response?.statusText) {
           errorMessage = `HTTP ${error.response.status}: ${error.response.statusText}`
         }
-        
+
         console.log('Final error message:', errorMessage)
         alert(`Error: ${errorMessage}`)
       }
     }
 
-    const deleteCompany = async (id) => {
-      if (!confirm('Delete this company?')) return
-      
+    const openDeleteConfirm = (company) => {
+      companyToDelete.value = company
+      showDeleteModal.value = true
+    }
+
+    const closeDeleteModal = () => {
+      showDeleteModal.value = false
+      companyToDelete.value = null
+    }
+
+    const confirmDelete = async () => {
+      if (!companyToDelete.value) return
+      const id = companyToDelete.value.id
+      closeDeleteModal()
+
       try {
         await axios.delete(`/companies/${id}`, {
           headers: { Authorization: `Bearer ${authStore.accessToken}` }
@@ -275,7 +346,7 @@ export default {
       } catch (error) {
         console.error('Error deleting company:', error)
         let errorMessage = 'Failed to delete company'
-        
+
         if (error.response?.data?.detail) {
           errorMessage = error.response.data.detail
         } else if (error.response?.data?.message) {
@@ -285,7 +356,34 @@ export default {
         } else if (typeof error === 'string') {
           errorMessage = error
         }
-        
+
+        alert(`Error: ${errorMessage}`)
+      }
+    }
+
+    // Kept for backward compatibility — original used confirm(); now replaced by modal
+    const deleteCompany = async (id) => {
+      if (!confirm('Delete this company?')) return
+
+      try {
+        await axios.delete(`/companies/${id}`, {
+          headers: { Authorization: `Bearer ${authStore.accessToken}` }
+        })
+        await loadCompanies()
+      } catch (error) {
+        console.error('Error deleting company:', error)
+        let errorMessage = 'Failed to delete company'
+
+        if (error.response?.data?.detail) {
+          errorMessage = error.response.data.detail
+        } else if (error.response?.data?.message) {
+          errorMessage = error.response.data.message
+        } else if (error.message) {
+          errorMessage = error.message
+        } else if (typeof error === 'string') {
+          errorMessage = error
+        }
+
         alert(`Error: ${errorMessage}`)
       }
     }
@@ -304,236 +402,23 @@ export default {
       loadCompanies()
     })
 
-    return { companies, loading, showModal, editingCompany, form, openCreateCompany, openEditCompany, closeModal, saveCompany, deleteCompany, manageEmployees, handleSidebarNav }
+    return {
+      companies, loading, showModal, editingCompany, form,
+      showDeleteModal, companyToDelete,
+      openCreateCompany, openEditCompany, closeModal, saveCompany,
+      openDeleteConfirm, closeDeleteModal, confirmDelete,
+      deleteCompany, manageEmployees, handleSidebarNav
+    }
   }
 }
 </script>
 
 <style scoped>
-.companies-layout {
-  min-height: 100vh;
-  background-color: var(--color-bg-page);
-}
-
-.companies-content {
+.view-content {
   padding: 24px;
   max-width: 1280px;
-}
-
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 24px;
-}
-
-.header-left {
   display: flex;
   flex-direction: column;
-}
-
-.page-title {
-  font-size: 16px;
-  font-weight: 500;
-  color: var(--color-text-base);
-  margin-bottom: 4px;
-}
-
-.breadcrumb {
-  font-size: 11px;
-  color: var(--color-text-muted);
-}
-
-.breadcrumb .separator {
-  margin: 0 6px;
-}
-
-.data-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.data-table thead {
-  background-color: var(--color-bg-header);
-}
-
-.data-table th {
-  padding: 12px 16px;
-  text-align: left;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-  border-bottom: 1px solid var(--color-border);
-}
-
-.data-table td {
-  padding: 12px 16px;
-  font-size: 13px;
-  color: var(--color-text-base);
-  border-bottom: 1px solid var(--color-border);
-}
-
-.data-table tr:hover {
-  background-color: var(--color-primary-light);
-}
-
-.data-table .font-medium {
-  font-weight: 500;
-}
-
-.data-table .actions {
-  display: flex;
-  gap: 8px;
-}
-
-.btn-text {
-  font-size: 12px;
-  color: var(--color-primary);
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 4px 8px;
-}
-
-.btn-text:hover {
-  background-color: var(--color-primary-light);
-  border-radius: 4px;
-}
-
-.btn-text.danger {
-  color: var(--color-error);
-}
-
-.btn-text.danger:hover {
-  background-color: #fef2f2;
-}
-
-.empty-state {
-  text-align: center;
-  padding: 48px;
-}
-
-.empty-state .icon {
-  width: 48px;
-  height: 48px;
-  margin: 0 auto 16px;
-  color: var(--color-border);
-}
-
-.empty-state p {
-  font-size: 13px;
-  color: var(--color-text-muted);
-  margin-bottom: 16px;
-}
-
-/* Modal Styles */
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background-color: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  z-index: 100;
-}
-
-.modal {
-  background-color: var(--color-bg-card);
-  border-radius: 12px;
-  width: 100%;
-  max-width: 480px;
-  max-height: 90vh;
-  overflow-y: auto;
-}
-
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--color-border);
-}
-
-.modal-header h2 {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--color-text-base);
-}
-
-.modal-close {
-  font-size: 18px;
-  color: var(--color-text-muted);
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.modal-close:hover {
-  color: var(--color-text-base);
-}
-
-.modal-body {
-  padding: 20px;
-}
-
-.modal-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  padding: 16px 20px;
-  border-top: 1px solid var(--color-border);
-}
-
-.form-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-}
-
-.form-group.span-2 {
-  grid-column: span 2;
-}
-
-@media (max-width: 640px) {
-  .companies-content {
-    padding: 16px;
-  }
-
-  .data-table {
-    font-size: 12px;
-  }
-  
-  .data-table th,
-  .data-table td {
-    padding: 8px 12px;
-  }
-  
-  .data-table .actions {
-    flex-direction: column;
-    gap: 4px;
-  }
-  
-  .form-grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .form-group.span-2 {
-    grid-column: span 1;
-  }
+  gap: 20px;
 }
 </style>
-
