@@ -8,6 +8,7 @@ from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import List, Tuple
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -280,7 +281,10 @@ def bulk_payroll_run(
     period_end = date(body.year, body.month, last_day)
     period = f"{body.year}-{body.month:02d}"
 
-    results: List[BulkPayrollEmployeeResult] = []
+    payroll_run_id = f"{company_id}_{body.year}_{body.month:02d}_{uuid4().hex[:8]}"
+
+    # Collect (employee, PayrollRecord | None, error_str | None)
+    staged: List[tuple] = []
     for emp in active_employees:
         try:
             basic_pay = float(emp.basic_salary or 0.0)
@@ -299,12 +303,13 @@ def bulk_payroll_run(
             sdl_amount = sdl_details["sdl_amount"]
             total_deductions = pension + medical + union_fees + other_ded + paye + uif
             net_pay = total_earnings - total_deductions
-            db.add(PayrollRecord(
+            pr = PayrollRecord(
                 company_id=company_id,
                 employee_id=emp.id,
                 payrun_month=body.month,
                 payrun_year=body.year,
                 payrun_period=period,
+                payroll_run_id=payroll_run_id,
                 employee_name=f"{emp.first_names} {emp.last_name}",
                 employee_id_no=emp.id_no,
                 pay_period_start=period_start,
@@ -323,37 +328,53 @@ def bulk_payroll_run(
                 net_pay=net_pay,
                 created_by=user.id,
                 status="draft",
-            ))
-            results.append(BulkPayrollEmployeeResult(
-                employee_id=emp.id,
-                employee_name=f"{emp.first_names} {emp.last_name}",
-                basic_pay=basic_pay,
-                total_earnings=total_earnings,
-                total_deductions=total_deductions,
-                net_pay=net_pay,
-                status="success",
-            ))
+            )
+            db.add(pr)
+            staged.append((emp, pr, None))
         except Exception as e:
-            results.append(BulkPayrollEmployeeResult(
-                employee_id=emp.id,
-                employee_name=f"{emp.first_names} {emp.last_name}",
-                basic_pay=0.0, total_earnings=0.0, total_deductions=0.0, net_pay=0.0,
-                status="error", error=str(e),
-            ))
+            staged.append((emp, None, str(e)))
 
     try:
-        successful = [r for r in results if r.status == "success"]
+        db.flush()  # assigns IDs without committing
         log_audit(db, user.id, "payroll.bulk_run", "company", company_id, {
-            "period": period, "total": len(results), "successful": len(successful),
+            "period": period,
+            "payroll_run_id": payroll_run_id,
+            "total": len(staged),
+            "successful": sum(1 for _, pr, _ in staged if pr is not None),
         }, company_id=company_id)
         db.commit()
     except Exception:
         db.rollback()
         raise HTTPException(status_code=500, detail="Failed to save payroll records")
 
+    results: List[BulkPayrollEmployeeResult] = []
+    for emp, pr, err in staged:
+        if pr is not None:
+            results.append(BulkPayrollEmployeeResult(
+                employee_id=emp.id,
+                employee_name=f"{emp.first_names} {emp.last_name}",
+                record_id=pr.id,
+                basic_pay=pr.basic_pay,
+                total_earnings=pr.total_earnings,
+                total_deductions=pr.total_deductions,
+                net_pay=pr.net_pay,
+                status="success",
+                distributed=False,
+            ))
+        else:
+            results.append(BulkPayrollEmployeeResult(
+                employee_id=emp.id,
+                employee_name=f"{emp.first_names} {emp.last_name}",
+                record_id=None,
+                basic_pay=0.0, total_earnings=0.0, total_deductions=0.0, net_pay=0.0,
+                status="error", error=err,
+            ))
+
+    successful = [r for r in results if r.status == "success"]
     return BulkPayrollResult(
         company_id=company_id,
         period=period,
+        payroll_run_id=payroll_run_id,
         total_employees=len(results),
         successful=len(successful),
         failed=len(results) - len(successful),
@@ -637,6 +658,135 @@ def distribute_payslip(
     db.commit()
     employee_name = emp.first_names + " " + emp.last_name if emp else record.employee_name
     return {"message": f"Payslip distributed successfully.", "employee_name": employee_name}
+
+
+@router.get("/companies/{company_id}/payroll/runs")
+def list_payroll_runs(
+    company_id: int,
+    user: User = Depends(require_permission("RUN_PAYROLL")),
+    db: Session = Depends(get_db),
+):
+    """Return one summary row per distinct payroll_run_id for this company."""
+    get_company(company_id, db, user)
+    records = (
+        db.query(PayrollRecord)
+        .filter(
+            PayrollRecord.company_id == company_id,
+            PayrollRecord.payroll_run_id.isnot(None),
+        )
+        .order_by(PayrollRecord.payrun_year.desc(), PayrollRecord.payrun_month.desc())
+        .all()
+    )
+    runs: dict = {}
+    for r in records:
+        rid = r.payroll_run_id
+        if rid not in runs:
+            runs[rid] = {
+                "payroll_run_id": rid,
+                "period": r.payrun_period,
+                "year": r.payrun_year,
+                "month": r.payrun_month,
+                "status": r.status,
+                "count": 0,
+                "total_net_pay": 0.0,
+                "published_count": 0,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+        runs[rid]["count"] += 1
+        runs[rid]["total_net_pay"] = round(runs[rid]["total_net_pay"] + r.net_pay, 2)
+        if r.distributed:
+            runs[rid]["published_count"] += 1
+        # Dominant status
+        if r.status in ("draft", "submitted", "rejected"):
+            runs[rid]["status"] = r.status
+        elif runs[rid]["status"] != "draft" and r.status == "approved":
+            runs[rid]["status"] = "approved"
+    for run in runs.values():
+        run["all_published"] = run["published_count"] == run["count"] and run["count"] > 0
+    return list(runs.values())
+
+
+@router.post("/payroll/runs/{run_id}/publish")
+def publish_payroll_run(
+    run_id: str,
+    user: User = Depends(require_permission("RUN_PAYROLL")),
+    db: Session = Depends(get_db),
+):
+    """Bulk-publish all records in a payroll run to employee portals."""
+    records = db.query(PayrollRecord).filter(PayrollRecord.payroll_run_id == run_id).all()
+    if not records:
+        raise HTTPException(status_code=404, detail="Payroll run not found")
+    get_company(records[0].company_id, db, user)
+
+    now = datetime.utcnow()
+    published, skipped = 0, 0
+    notifications = []
+    for record in records:
+        if record.distributed:
+            published += 1
+            continue
+        if not record.employee_id:
+            skipped += 1
+            continue
+        link = db.query(EmployeeUser).filter_by(employee_id=record.employee_id).first()
+        if not link:
+            skipped += 1
+            continue
+        portal_user = db.get(User, link.user_id)
+        if not portal_user or not portal_user.is_active:
+            skipped += 1
+            continue
+        record.distributed = True
+        record.distributed_at = now
+        record.distributed_by = user.id
+        period_label = record.payrun_period or f"{record.payrun_year}-{record.payrun_month:02d}"
+        notifications.append({
+            "recipient_user_id": portal_user.id,
+            "type": "PAYSLIP_AVAILABLE",
+            "message": f"Your payslip for {period_label} is available.",
+            "entity_type": "payroll_record",
+            "entity_id": record.id,
+            "is_read": False,
+        })
+        published += 1
+
+    if notifications:
+        db.execute(insert(Notification), notifications)
+
+    period = records[0].payrun_period if records else run_id
+    log_audit(db, user.id, "payslip.bulk_published", "payroll_run", None,
+              {"run_id": run_id, "period": period, "published": published, "skipped": skipped},
+              company_id=records[0].company_id if records else None)
+    db.commit()
+    return {"ok": True, "published": published, "skipped": skipped}
+
+
+@router.post("/payroll/runs/{run_id}/unpublish")
+def unpublish_payroll_run(
+    run_id: str,
+    user: User = Depends(require_permission("RUN_PAYROLL")),
+    db: Session = Depends(get_db),
+):
+    """Retract payslips for an entire payroll run from employee portals."""
+    records = db.query(PayrollRecord).filter(PayrollRecord.payroll_run_id == run_id).all()
+    if not records:
+        raise HTTPException(status_code=404, detail="Payroll run not found")
+    get_company(records[0].company_id, db, user)
+
+    count = 0
+    for record in records:
+        if record.distributed:
+            record.distributed = False
+            record.distributed_at = None
+            record.distributed_by = None
+            count += 1
+
+    period = records[0].payrun_period if records else run_id
+    log_audit(db, user.id, "payslip.bulk_unpublished", "payroll_run", None,
+              {"run_id": run_id, "period": period, "retracted": count},
+              company_id=records[0].company_id if records else None)
+    db.commit()
+    return {"ok": True, "retracted": count}
 
 
 @router.get("/payroll-records/{record_id}/payslip")

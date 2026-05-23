@@ -81,6 +81,7 @@ def run_migrations():
             ("audit_events",    "ip_address",                           "TEXT"),
             ("users",           "force_password_change",                "BOOLEAN DEFAULT FALSE"),
             ("users",           "last_login",                           "TIMESTAMP"),
+            ("payroll_records", "payroll_run_id",                       "TEXT"),
         ]
         for table, col, col_type in cols:
             try:

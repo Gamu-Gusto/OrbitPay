@@ -261,6 +261,7 @@ def get_portal_payslips(
             "total_earnings": r.total_earnings,
             "total_deductions": r.total_deductions,
             "net_pay": r.net_pay,
+            "published_at": r.distributed_at.isoformat() if r.distributed_at else None,
         }
         for r in records
     ]

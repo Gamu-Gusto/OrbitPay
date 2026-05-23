@@ -216,6 +216,9 @@ class PayrollRecord(Base):
     distributed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     distributed_by: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
+    # Bulk run grouping — set on records created by /payroll/bulk
+    payroll_run_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+
     # Relationships
     company = relationship("Company", back_populates="payroll_records")
     employee = relationship("Employee", back_populates="payroll_records")

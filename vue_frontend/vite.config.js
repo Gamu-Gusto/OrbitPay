@@ -80,6 +80,10 @@ export default defineConfig({
       '/compliance': {
         target: 'http://localhost:8000',
         changeOrigin: true
+      },
+      '/payroll/runs': {
+        target: 'http://localhost:8000',
+        changeOrigin: true
       }
     }
   }

@@ -106,12 +106,23 @@
         <span v-if="emailError" class="email-status warn">{{ emailError }}</span>
       </div>
 
-      <!-- Distribute to employee portals -->
+      <!-- Publish to employee portals -->
       <div class="email-row" v-if="result.successful > 0 && periodStatus === 'approved'">
-        <button @click="distributeAll" :disabled="distributing" class="btn-secondary">
-          {{ distributing ? distributeProgress : 'Distribute All Payslips to Portals' }}
-        </button>
-        <span v-if="distributeResult" class="email-status ok">{{ distributeResult }}</span>
+        <template v-if="!allPublished">
+          <button @click="publishRun" :disabled="publishing" class="btn-secondary">
+            {{ publishing ? 'Publishing…' : 'Publish All to Employee Portal' }}
+          </button>
+        </template>
+        <template v-else>
+          <button @click="unpublishRun" :disabled="publishing" class="btn-secondary btn-warning">
+            {{ publishing ? 'Retracting…' : 'Unpublish from Portal' }}
+          </button>
+        </template>
+        <span v-if="publishResult" class="email-status" :class="publishResult.skipped > 0 ? 'warn' : 'ok'">
+          {{ publishResult.published }} published
+          <span v-if="publishResult.skipped > 0">, {{ publishResult.skipped }} skipped (no portal account)</span>
+        </span>
+        <span v-if="unpublishResult" class="email-status ok">{{ unpublishResult }}</span>
       </div>
 
       <!-- Employee breakdown table -->
@@ -125,7 +136,8 @@
               <th class="num">Total Earnings</th>
               <th class="num">Deductions</th>
               <th class="num">Net Pay</th>
-              <th class="status-col">Status</th>
+              <th class="status-col">Run</th>
+              <th class="status-col">Portal</th>
             </tr>
           </thead>
           <tbody>
@@ -141,6 +153,11 @@
                 </span>
                 <span v-if="emp.error" class="err-text" :title="emp.error"> ⚠</span>
               </td>
+              <td class="status-col">
+                <span v-if="emp.status !== 'success'" class="badge badge-gray">—</span>
+                <span v-else-if="emp.distributed" class="badge badge-published">Published</span>
+                <span v-else class="badge badge-gray">Draft</span>
+              </td>
             </tr>
           </tbody>
           <tfoot>
@@ -151,6 +168,9 @@
               <td class="num fw">R {{ fmt(result.employees.filter(e=>e.status==='success').reduce((s,e)=>s+e.total_deductions,0)) }}</td>
               <td class="num fw">R {{ fmt(result.total_net_pay) }}</td>
               <td></td>
+              <td class="status-col" style="font-size:11px;color:var(--color-text-muted)">
+                {{ result.employees.filter(e=>e.distributed).length }}/{{ result.successful }}
+              </td>
             </tr>
           </tfoot>
         </table>
@@ -195,8 +215,19 @@ export default {
     const showRejectInput = ref(false)
     const rejectReason = ref('')
 
+    // Portal publish
+    const publishing = ref(false)
+    const publishResult = ref(null)
+    const unpublishResult = ref('')
+
     const canSubmit = computed(() => periodStatus.value === 'draft' && hasRole(['super_admin', 'accountant', 'manager']))
     const canApprove = computed(() => periodStatus.value === 'submitted' && hasRole(['super_admin', 'manager']))
+
+    const allPublished = computed(() => {
+      if (!result.value?.employees) return false
+      const successful = result.value.employees.filter(e => e.status === 'success')
+      return successful.length > 0 && successful.every(e => e.distributed)
+    })
 
     const periodStatusLabel = computed(() => ({
       draft: 'Draft', submitted: 'Submitted for Approval', approved: 'Approved', rejected: 'Rejected', none: ''
@@ -238,6 +269,8 @@ export default {
       emailResult.value = null
       emailError.value = ''
       approvalMsg.value = ''
+      publishResult.value = null
+      unpublishResult.value = ''
       periodStatus.value = 'draft'
       loading.value = true
       try {
@@ -318,31 +351,41 @@ export default {
       }
     }
 
-    // Distribute payslips to employee portals
-    const distributing = ref(false)
-    const distributeProgress = ref('')
-    const distributeResult = ref('')
-
-    const distributeAll = async () => {
-      if (!result.value?.employees) return
-      const records = result.value.employees.filter(e => e.status === 'success' && e.record_id)
-      if (!records.length) return
-      distributing.value = true
-      distributeResult.value = ''
-      let distributed = 0
-      let skipped = 0
-      for (let i = 0; i < records.length; i++) {
-        distributeProgress.value = `Distributing ${i + 1} of ${records.length}…`
-        try {
-          await axios.post(`/payroll-records/${records[i].record_id}/distribute`)
-          distributed++
-        } catch (e) {
-          const detail = e?.response?.data?.detail || ''
-          if (detail.toLowerCase().includes('no portal') || detail.toLowerCase().includes('no linked')) skipped++
-        }
+    const publishRun = async () => {
+      if (!result.value?.payroll_run_id) return
+      publishing.value = true
+      publishResult.value = null
+      unpublishResult.value = ''
+      try {
+        const { data } = await axios.post(`/payroll/runs/${result.value.payroll_run_id}/publish`)
+        publishResult.value = data
+        result.value.employees.forEach(e => {
+          if (e.status === 'success') e.distributed = true
+        })
+      } catch (e) {
+        publishResult.value = null
+        errorMsg.value = e?.response?.data?.detail || 'Failed to publish payslips'
+      } finally {
+        publishing.value = false
       }
-      distributing.value = false
-      distributeResult.value = `${distributed} distributed${skipped ? `, ${skipped} skipped (no portal account)` : ''}.`
+    }
+
+    const unpublishRun = async () => {
+      if (!result.value?.payroll_run_id) return
+      publishing.value = true
+      publishResult.value = null
+      unpublishResult.value = ''
+      try {
+        const { data } = await axios.post(`/payroll/runs/${result.value.payroll_run_id}/unpublish`)
+        unpublishResult.value = `${data.retracted} payslip${data.retracted !== 1 ? 's' : ''} retracted from portal.`
+        result.value.employees.forEach(e => {
+          if (e.status === 'success') e.distributed = false
+        })
+      } catch (e) {
+        errorMsg.value = e?.response?.data?.detail || 'Failed to unpublish payslips'
+      } finally {
+        publishing.value = false
+      }
     }
 
     onMounted(loadCompanies)
@@ -351,9 +394,10 @@ export default {
       companies, selectedCompany, selectedMonth, selectedYear, months: MONTHS,
       loading, sending, result, errorMsg, emailResult, emailError,
       periodStatus, approvalLoading, approvalMsg, approvalMsgType, showRejectInput, rejectReason,
+      publishing, publishResult, unpublishResult, allPublished,
       canSubmit, canApprove, periodStatusLabel, statusNote, statusBadgeClass,
-      distributing, distributeProgress, distributeResult,
-      fmt, runPayroll, sendPayslips, distributeAll, submitForApproval, approvePayroll, rejectPayroll, hasRole
+      fmt, runPayroll, sendPayslips, publishRun, unpublishRun,
+      submitForApproval, approvePayroll, rejectPayroll, hasRole
     }
   }
 }
@@ -426,7 +470,7 @@ export default {
 .stat-val { font-size: 22px; font-weight: 700; color: var(--color-text-base); line-height: 1; }
 .stat-label { font-size: 11px; color: var(--color-text-muted); }
 
-/* Email */
+/* Email / publish rows */
 .email-row {
   display: flex;
   align-items: center;
@@ -485,8 +529,9 @@ export default {
 }
 .badge-ok { background: #dcfce7; color: #15803d; }
 .badge-err { background: #fee2e2; color: #b91c1c; }
-.badge-gray { background: var(--color-bg-page); color: var(--color-text-muted); }
+.badge-gray { background: var(--color-bg-page); color: var(--color-text-muted); border: 1px solid var(--color-border); }
 .badge-yellow { background: #fef9c3; color: #a16207; }
+.badge-published { background: #dbeafe; color: #1d4ed8; }
 .err-text { cursor: help; color: #f59e0b; margin-left: 4px; }
 
 /* Approval workflow */
@@ -510,6 +555,10 @@ export default {
   transition: background 0.12s;
 }
 .btn-danger-outline:hover { background: #fee2e2; }
+.btn-warning {
+  border-color: #fbbf24 !important;
+  color: #92400e;
+}
 .reject-row { display: flex; gap: 10px; margin-bottom: 10px; }
 .reject-row .form-input { flex: 1; }
 .approval-msg { font-size: 13px; padding: 8px 12px; border-radius: 6px; margin-bottom: 8px; }

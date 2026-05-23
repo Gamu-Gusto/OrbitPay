@@ -248,17 +248,20 @@ class BulkPayrollRequest(BaseModel):
 class BulkPayrollEmployeeResult(BaseModel):
     employee_id: int
     employee_name: str
+    record_id: Optional[int] = None
     basic_pay: float
     total_earnings: float
     total_deductions: float
     net_pay: float
     status: str  # "success" or "error"
     error: Optional[str] = None
+    distributed: bool = False
 
 
 class BulkPayrollResult(BaseModel):
     company_id: int
     period: str
+    payroll_run_id: Optional[str] = None
     total_employees: int
     successful: int
     failed: int
