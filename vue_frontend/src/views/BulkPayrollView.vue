@@ -15,7 +15,7 @@
       <div class="config-row">
         <div class="form-group">
           <label class="form-label">Company</label>
-          <select v-model.number="selectedCompany" class="form-input">
+          <select v-model.number="selectedCompany" @change="onCompanySelect" class="form-input">
             <option :value="0">Select company</option>
             <option v-for="c in companies" :key="c.id" :value="c.id">{{ c.name }}</option>
           </select>
@@ -37,6 +37,54 @@
             <span v-else>Run Payroll</span>
           </button>
         </div>
+      </div>
+    </div>
+
+    <!-- Previous runs panel — shown when a company is selected and no live result -->
+    <div v-if="selectedCompany && !result && previousRuns.length" class="card">
+      <h2 class="section-title">Previous Payroll Runs</h2>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Period</th>
+              <th class="num">Employees</th>
+              <th class="num">Net Pay</th>
+              <th class="status-col">Status</th>
+              <th class="status-col">Portal</th>
+              <th class="status-col">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="run in previousRuns" :key="run.payroll_run_id">
+              <td class="fw">{{ run.period }}</td>
+              <td class="num">{{ run.count }}</td>
+              <td class="num">R {{ fmt(run.total_net_pay) }}</td>
+              <td class="status-col">
+                <span class="badge" :class="statusBadgeClass(run.status)">{{ run.status }}</span>
+              </td>
+              <td class="status-col">
+                <span v-if="run.all_published" class="badge badge-published">All Published</span>
+                <span v-else-if="run.published_count > 0" class="badge badge-yellow">{{ run.published_count }}/{{ run.count }}</span>
+                <span v-else class="badge badge-gray">Unpublished</span>
+              </td>
+              <td class="status-col">
+                <button
+                  v-if="!run.all_published"
+                  @click="publishRunById(run.payroll_run_id, run)"
+                  :disabled="run._publishing"
+                  class="btn btn-primary btn-sm"
+                >{{ run._publishing ? '…' : 'Publish' }}</button>
+                <button
+                  v-else
+                  @click="unpublishRunById(run.payroll_run_id, run)"
+                  :disabled="run._publishing"
+                  class="btn btn-secondary btn-sm"
+                >{{ run._publishing ? '…' : 'Unpublish' }}</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
 
@@ -106,8 +154,8 @@
         <span v-if="emailError" class="email-status warn">{{ emailError }}</span>
       </div>
 
-      <!-- Publish to employee portals -->
-      <div class="email-row" v-if="result.successful > 0 && periodStatus === 'approved'">
+      <!-- Publish to employee portals — visible for any completed run -->
+      <div class="email-row" v-if="result.successful > 0">
         <template v-if="!allPublished">
           <button @click="publishRun" :disabled="publishing" class="btn-secondary">
             {{ publishing ? 'Publishing…' : 'Publish All to Employee Portal' }}
@@ -246,11 +294,53 @@ export default {
 
     const fmt = (n) => Number(n || 0).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
+    // Previous runs (loaded from backend when company changes and no live result)
+    const previousRuns = ref([])
+
+    const loadPreviousRuns = async () => {
+      if (!selectedCompany.value) { previousRuns.value = []; return }
+      try {
+        const { data } = await axios.get(`/companies/${selectedCompany.value}/payroll/runs`)
+        previousRuns.value = (data || []).map(r => ({ ...r, _publishing: false }))
+      } catch { previousRuns.value = [] }
+    }
+
+    const publishRunById = async (runId, run) => {
+      run._publishing = true
+      try {
+        const { data } = await axios.post(`/payroll/runs/${runId}/publish`)
+        run.published_count = run.count
+        run.all_published = true
+        run._publishing = false
+      } catch (e) {
+        run._publishing = false
+        errorMsg.value = e?.response?.data?.detail || 'Failed to publish'
+      }
+    }
+
+    const unpublishRunById = async (runId, run) => {
+      run._publishing = true
+      try {
+        await axios.post(`/payroll/runs/${runId}/unpublish`)
+        run.published_count = 0
+        run.all_published = false
+        run._publishing = false
+      } catch (e) {
+        run._publishing = false
+        errorMsg.value = e?.response?.data?.detail || 'Failed to unpublish'
+      }
+    }
+
     const loadCompanies = async () => {
       try {
         const { data } = await axios.get('/companies')
         companies.value = data
       } catch {}
+    }
+
+    const onCompanySelect = () => {
+      result.value = null
+      loadPreviousRuns()
     }
 
     const fetchPeriodStatus = async () => {
@@ -395,8 +485,10 @@ export default {
       loading, sending, result, errorMsg, emailResult, emailError,
       periodStatus, approvalLoading, approvalMsg, approvalMsgType, showRejectInput, rejectReason,
       publishing, publishResult, unpublishResult, allPublished,
+      previousRuns,
       canSubmit, canApprove, periodStatusLabel, statusNote, statusBadgeClass,
       fmt, runPayroll, sendPayslips, publishRun, unpublishRun,
+      publishRunById, unpublishRunById, onCompanySelect,
       submitForApproval, approvePayroll, rejectPayroll, hasRole
     }
   }

@@ -84,6 +84,18 @@ export default defineConfig({
       '/payroll/runs': {
         target: 'http://localhost:8000',
         changeOrigin: true
+      },
+      '/portal': {
+        target: 'http://localhost:8000',
+        changeOrigin: true
+      },
+      '/documents': {
+        target: 'http://localhost:8000',
+        changeOrigin: true
+      },
+      '/notifications': {
+        target: 'http://localhost:8000',
+        changeOrigin: true
       }
     }
   }
