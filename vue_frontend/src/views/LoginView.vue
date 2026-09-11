@@ -237,7 +237,7 @@ export default {
       errorMsg.value = ''
       try {
         const { data } = await axios.post('/auth/login', {
-          email: email.value,
+          email: email.value.trim().toLowerCase(),
           password: password.value,
         })
         auth.setAuth(data.access_token, data.user, data.refresh_token)
@@ -249,8 +249,19 @@ export default {
         } else {
           router.push('/')
         }
-      } catch {
-        errorMsg.value = 'Invalid email or password.'
+      } catch (error) {
+        const status = error?.response?.status
+        if (status === 401) {
+          errorMsg.value = 'Invalid email or password.'
+        } else if (status === 422) {
+          errorMsg.value = 'Please enter a valid email address.'
+        } else if (error?.code === 'ECONNABORTED') {
+          errorMsg.value = 'The server took too long to respond. Please try again.'
+        } else if (!error?.response) {
+          errorMsg.value = 'Cannot connect to the server. Please check the deployment configuration.'
+        } else {
+          errorMsg.value = error.response?.data?.detail || 'Login failed. Please try again.'
+        }
       } finally {
         loading.value = false
       }

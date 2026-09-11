@@ -165,14 +165,19 @@ _allowed_origins = [
 ]
 _frontend_url = os.environ.get("FRONTEND_URL", "")
 if _frontend_url:
-    _allowed_origins.append(_frontend_url)
+    # Browser Origin headers never include a trailing slash. Accept the common
+    # Render configuration form where the URL was pasted with one.
+    _allowed_origins.append(_frontend_url.rstrip("/"))
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "Accept", "X-Requested-With"],
+    allow_headers=[
+        "Authorization", "Content-Type", "Accept", "X-Requested-With",
+        "X-Setup-Secret",
+    ],
 )
 
 app.include_router(auth_router)

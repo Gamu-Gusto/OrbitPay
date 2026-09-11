@@ -84,7 +84,11 @@ def register():
 def login(request: Request, req: LoginRequest, db: Session = Depends(get_db)):
     ip = _client_ip(request)
     try:
-        user = db.query(User).filter(User.email == req.email).first()
+        # Email addresses are stored lower-cased by both account creation flows.
+        # Normalise login input as well so casing or pasted whitespace cannot lock
+        # a valid user out.
+        email = str(req.email).strip().lower()
+        user = db.query(User).filter(User.email == email).first()
         if not user:
             raise HTTPException(status_code=401, detail="Invalid credentials")
         if not user.is_active:
@@ -92,7 +96,7 @@ def login(request: Request, req: LoginRequest, db: Session = Depends(get_db)):
         if not verify_password(req.password, user.password_hash):
             log_audit(db, user.id, "user.login_failed", "user", user.id, ip_address=ip)
             db.commit()
-            logger.warning(f"Failed login attempt for {req.email} from {ip}")
+            logger.warning(f"Failed login attempt for {email} from {ip}")
             raise HTTPException(status_code=401, detail="Invalid credentials")
         roles = [db.get(Role, ur.role_id).name for ur in user.roles]
         company_ids = []
