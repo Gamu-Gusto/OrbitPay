@@ -6,9 +6,10 @@ import './style.css'
 import axios from 'axios'
 import { useAuthStore } from './stores/auth'
 
-if (import.meta.env.VITE_API_URL) {
-  axios.defaults.baseURL = import.meta.env.VITE_API_URL
-}
+// Render injects VITE_* variables at build time. Use the production API as a
+// safe fallback so a missing dashboard variable cannot make API requests hit
+// the static site's SPA rewrite and appear to succeed with HTML.
+axios.defaults.baseURL = import.meta.env.VITE_API_URL || 'https://payroll-api-6ov2.onrender.com'
 
 axios.defaults.timeout = 15000
 // SECURITY TODO: JWT stored in localStorage is vulnerable to XSS.

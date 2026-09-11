@@ -162,6 +162,7 @@ _allowed_origins = [
     "https://localhost:5174", "https://127.0.0.1:5174",
     "https://localhost:5179", "https://127.0.0.1:5179",
     "https://192.168.0.190:5173", "https://192.168.0.190:5174", "https://192.168.0.190:5179",
+    "https://payroll-frontend-g4s4.onrender.com",
 ]
 _frontend_url = os.environ.get("FRONTEND_URL", "")
 if _frontend_url:
