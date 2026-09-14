@@ -109,7 +109,10 @@ axios.interceptors.response.use(
     }
 
     // 403 — authenticated but not authorised
-    if (status === 403) {
+    // The public first-run setup form handles an invalid secret locally. Let
+    // that request reach its component instead of redirecting to /forbidden.
+    const isAdminSetupRequest = original.url?.includes('/auth/admin/setup')
+    if (status === 403 && !isAdminSetupRequest) {
       if (window.location.pathname !== '/forbidden') {
         window.location.href = '/forbidden'
       }
