@@ -19,6 +19,14 @@ def create_company(
     try:
         company = Company(**company_in.model_dump(exclude_unset=True))
         db.add(company)
+
+        # Company listings are tenant-scoped for accountants. Assign a company
+        # created by an accountant to that same user before committing so the
+        # newly-created company remains visible (and accessible) to its creator.
+        if "accountant" in getattr(user, "role_names", []):
+            db.flush()
+            db.add(AccountantAssignment(accountant_user_id=user.id, company_id=company.id))
+
         db.commit()
         db.refresh(company)
         return company
